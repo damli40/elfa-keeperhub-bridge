@@ -1,14 +1,40 @@
 # Elfa → KeeperHub execution bridge — design
 
-Date: 2026-09-06
-Status: approved in conversation, pending written review
+Date: 2026-09-06 (rev 2, 2026-09-07 after adversarial review)
+Status: reviewed adversarially; findings applied; ready for implementation plan
 Target: Agent Economy hackathon, main track "Best Integration into a Live Project" (close Sep 18 2026 12:00 CEST)
+
+## 0. What changed in rev 2
+
+An adversarial review found the money-moving node wrong in three ways at once, each of
+which would have *run* and produced a wrong number rather than an error. Corrected here:
+
+| Was (rev 1, wrong) | Is (rev 2, verified) |
+|---|---|
+| `amountIn = 0.002` (human ETH) | `amountIn = "2000000000000000"` (raw 18-dec integer); `ethValue = "0.002"` (human) — two different units on the same node |
+| `{{@quote-1:Quote.amountOut}}` | `{{@quote-1:Quote.result.amountOut}}` — reads sit under `result` |
+| `wrapped/deposit` on Sepolia | `wrapped/wrap` — `deposit` is not an action |
+| Telegram needs no credentials | needs `integrationId` **and** `chatId`; `parseMode` must be `none` |
+| "docs don't mention an allowlist" | docs do say "allowlisted host" — but the real check is **DNS resolution** (probed) |
+| Worker checks timestamp then signature | signature first; unsigned traffic is never persisted |
+
+Probes run 2026-09-07 (all free, no state changed):
+
+- `POST /v2/auto/queries/validate` with an undeployed `*.workers.dev` URL →
+  `EQL_INVALID_ACTION: "Webhook URL host could not be resolved"`. Same body with
+  `https://example.com/elfa` and `https://httpbin.org/post` → `valid: true`.
+  **⇒ no allowlist; the host must resolve in DNS at plan-creation time.**
+- `get_spending_limits` → `effectiveDailyCapWei = 5500000000000000` (0.0055 ETH/day),
+  `dailyUsedWei = 0`. **⇒ at most two 0.002 ETH runs per day.**
+- `uniswap/quote-exact-input` on Base (8453), WETH→USDC, fee 500, amountIn
+  `2000000000000000` → `result.amountOut = "4978247"` (4.978247 USDC; ETH ≈ $2,489),
+  `gasEstimate` 72,987. **⇒ pool exists, path and units confirmed.**
 
 ## 1. Problem (read this first)
 
 Elfa's **Auto** is a live, paid condition engine for traders. You describe a market
-condition — a funding rate flipping negative, a liquidation cascade, a Polymarket price
-crossing, an X post from a named account — and Auto watches continuously and fires a
+condition — a funding rate flipping negative, a liquidation cascade, a prediction-market
+price crossing, a post from a named account — and Auto watches continuously and fires a
 webhook when it becomes true.
 
 Auto used to also *execute*: it had `market_order` and `limit_order` actions. Those were
@@ -17,40 +43,36 @@ removed. Elfa's own documentation now says:
 > "Route follow-up execution through your own runner off a `webhook`, `notify` or
 > `telegram_bot` action."
 
-So every Elfa user who wants a condition to *do* something on-chain now has to write and
-host their own runner. A hand-written or agent-written runner is exactly the component that
-double-fires on a retried delivery, executes on a forged request, or moves the wrong amount.
+So every Elfa user who wants a condition to *do* something on-chain must now write and host
+their own runner. A hand-rolled runner is exactly the component that double-fires on a
+retried delivery, executes on a forged request, or moves the wrong amount.
 
-KeeperHub is a deterministic execution layer with a hosted wallet, gas sponsorship, spending
-limits and a per-step execution log. It already exposes an incoming webhook trigger. The two
-products do not connect today because KeeperHub's webhook trigger requires an
-`Authorization: Bearer wfb_…` key and Elfa's webhook action cannot send custom headers
-(it sends only its own HMAC signature headers).
+KeeperHub is a deterministic execution layer: hosted wallet, gas sponsorship, spending caps,
+per-step execution log, and an incoming webhook trigger. The two products cannot connect
+today because KeeperHub's webhook trigger requires `Authorization: Bearer wfb_…` and Elfa's
+webhook action sends only its own signature headers, with no way to add one.
 
-**This project is the bridge.** Elfa decides *when*; KeeperHub decides *how*; the bridge
-proves *who* sent the event and *that it is not a repeat*, then hands off. Nothing in the
-bridge or in the incoming payload can change *how much* moves.
+**This project is the bridge.** Elfa decides *when*. KeeperHub decides *how*. The bridge
+proves *who sent it* and *that it is not a repeat*, then hands off. Nothing in the bridge or
+in the incoming payload can change *how much* moves.
 
 ## 2. Goals and non-goals
 
 Goals
 - Elfa Auto trigger → real on-chain value movement executed by KeeperHub on Base mainnet.
-- Every delivery is authenticated (HMAC), replay-bounded (30 s window) and de-duplicated
-  (event id) before anything is forwarded.
-- Every decision — forwarded, duplicate, bad signature, stale, kill-switched, KeeperHub
-  error — is recorded and visible on a public read-only audit page.
-- Amount, token pair, slippage floor and chain live only in the KeeperHub workflow.
-- The KeeperHub workflow is authored through KeeperHub's MCP (agent-built), and has a
-  visible refusal path (balance too low, quote below floor).
-- Reproducible by a judge: one `setup` command creates the Elfa plan; one `fire` command
-  sends a synthetic signed event end-to-end.
+- Every delivery authenticated (HMAC), replay-bounded (30 s), de-duplicated (event id)
+  before anything is forwarded.
+- Every decision recorded and visible on a public read-only audit page.
+- Amount, token pair, slippage floor and chain live **only** in the KeeperHub workflow.
+- Workflow authored through KeeperHub's MCP (agent-built), with a visible refusal path.
+- Reproducible by a judge: one `setup` command, one `fire` command.
 
 Non-goals (deliberate)
-- No execution on Hyperliquid. KeeperHub's Hyperliquid support is read-only (Info API).
-- No LLM anywhere in the execution path. The pitch is deterministic execution.
+- No execution on Hyperliquid — KeeperHub's Hyperliquid support is read-only (Info API).
+- No LLM in the execution path. The pitch is deterministic execution.
 - No multi-tenant use; one operator, one Elfa key, one KeeperHub org.
-- No integration with the operator's own products (Sentinel/Guardian stay out).
-- No custom UI beyond the audit page. KeeperHub's own execution log is the UI.
+- Nothing of the operator's own products (Sentinel/Guardian) in the story or on camera.
+- No UI beyond the audit page; KeeperHub's execution log is the UI.
 
 ## 3. Architecture
 
@@ -64,22 +86,22 @@ Non-goals (deliberate)
                                               read-only decision log)                      with tx hash
 ```
 
-Three pieces, each independently testable:
-
 | Piece | Owner | Purpose | Interface |
 |---|---|---|---|
-| Elfa plan | Elfa (created by our CLI) | Decide *when* | Outbound webhook, documented headers/body |
-| Worker | this repo | Prove *who*, drop repeats, hand off, log | `POST /elfa`, `GET /audit`, `GET /health` |
-| KeeperHub workflow | KeeperHub hosted app (created via MCP by our CLI) | Decide *how*, execute | Webhook trigger, execution log |
+| Elfa plan | Elfa (created by our CLI) | decide *when* | outbound signed webhook |
+| Worker | this repo | prove *who*, drop repeats, hand off, log | `POST /elfa`, `GET /audit`, `GET /health` |
+| KeeperHub workflow | KeeperHub hosted app (via MCP) | decide *how*, execute | webhook trigger, execution log |
+
+**Build order is forced by the DNS probe:** workflow first, then Worker deployed, then Elfa
+plan. A plan cannot be created against a host that does not yet resolve.
 
 ## 4. Components
 
 ### 4.1 Elfa plan
 
-Created by `bridge setup` through `POST /v2/auto/queries/validate` then
-`POST /v2/auto/queries` with the operator's `ELFA_API_KEY` (free tier is sufficient:
-verified 2026-09-06, a plan was created and cancelled; 5 credits per create; 2 active
-plans max on free tier).
+Created by `bridge setup` via `POST /v2/auto/queries/validate` then `POST /v2/auto/queries`
+using `ELFA_API_KEY`. Free tier verified working 2026-09-06 (one plan created and cancelled;
+5 credits per create; 2 active plans max).
 
 Headline plan (stays live through judging):
 
@@ -90,57 +112,68 @@ Headline plan (stays live through judging):
   "conditions": {"AND": [{"source":"funding","method":"annualized_rate",
                  "args":{"ticker":"BTC:BINANCE"},"operator":"crosses_below","value":0}]},
   "actions": [{"stepId":"step_1","type":"webhook",
-               "params":{"url":"https://<worker>/elfa","signingSecret":"<ELFA_SIGNING_SECRET>","allNotifications":true}}],
+               "params":{"url":"https://<deployed-worker>/elfa","signingSecret":"<ELFA_SIGNING_SECRET>","allNotifications":true}}],
   "expiresIn": "168h",
   "repeat": {"cooldown":"24h","maxTriggers":3}
 }
 ```
 
-Filming plan (fires on demand): same action, condition
-`price.current BTC on hyperliquid crosses_above <spot + 0.05 %>` (or `crosses_below`),
-`expiresIn: 1h`, no repeat. `bridge setup --film` computes the threshold from the live
-price at creation time. The Discord answer confirms the main-track demo may be any live
-run; the funding-flip plan is the story, the price plan is the camera.
+`repeat` shape and the funding condition were confirmed valid by the probe above (the only
+rejection was the unresolvable host). `maxTriggers: 3` × 0.002 ETH = 0.006 ETH, which is
+above the 0.0055 daily cap only if all three land in one day; the 24 h cooldown prevents that.
 
-Elfa delivery contract (from docs.elfa.ai/auto/notifications, re-read 2026-09-06):
+Filming plan (fires on demand): same action, condition `price.current` on `BTC`,
+`exchange: hyperliquid`, `crosses_above` a threshold computed from live spot at creation
+time, `expiresIn: 1h`, no repeat. `bridge setup --film` computes it.
 
-- Headers: `X-Auto-Event-Id`, `X-Auto-Signature-Timestamp` (unix seconds),
+Elfa delivery contract (docs re-read 2026-09-06, re-confirmed in review):
+
+- Headers `X-Auto-Event-Id`, `X-Auto-Signature-Timestamp` (unix seconds),
   `X-Auto-Signature: v1=<hex>`.
-- Signature: `HMAC_SHA256(signingSecret, timestamp + "." + eventId + "." + rawBody)`.
-  The secret is the raw key; it is **not** hashed first.
-- Body: `{ id, type, category, title, body, data: { queryId }, priority, createdAt }`,
-  plus Auto Trigger Context where present.
-- No custom headers can be configured on the action. Hence the Worker.
+- `HMAC_SHA256(signingSecret, timestamp + "." + eventId + "." + rawBody)`; the secret is the
+  raw key, **not** hashed first (hashing is a legacy x402 fallback only).
+- Documented body: `{ id, type, category, title, body, data: { queryId }, priority, createdAt }`.
+- **Auto Trigger Context (`observedValue`, `triggerTime`) is NOT in the documented webhook
+  body** — it appears in the SSE frame. The Worker treats both as optional (§4.2).
+- No custom headers configurable. Hence the Worker.
 
 ### 4.2 Worker (`worker/`)
 
-Runtime: Cloudflare Workers, TypeScript, no framework. Storage: one KV namespace `BRIDGE`.
-
-Routes
+Cloudflare Workers, TypeScript, no framework. One KV namespace `BRIDGE`.
 
 | Route | Auth | Behaviour |
 |---|---|---|
-| `POST /elfa` | Elfa HMAC | The pipeline below. Always answers within ~1 s. |
-| `GET /audit` | none | Last 200 decisions as JSON (`?format=html` renders a plain table). Public, read-only. |
-| `GET /health` | none | `{ ok, enabled, routes: n, version }`. |
+| `POST /elfa` | Elfa HMAC | pipeline below; always answers in ~1 s |
+| `GET /audit` | none | last 200 decisions from one `list()` call; `?format=html` renders a table |
+| `GET /health` | none | `{ ok, enabled, routes, version, rejectedUnsigned }` |
 
-Pipeline for `POST /elfa` (each step logs a decision and stops on failure):
+Pipeline — **signature first, and unsigned traffic is never written to KV** (the free tier
+allows 1,000 writes/day; persisting junk would exhaust it and disarm the dedupe guard):
 
-1. Read raw body as text. Parse headers. Missing header → `refused:missing_header` (400).
-2. `now - timestamp > 30 s` (either direction) → `refused:stale` (401).
-3. Recompute HMAC with `ELFA_SIGNING_SECRET`; constant-time compare → `refused:bad_signature` (401).
-4. `BRIDGE_ENABLED !== "true"` → `dropped:kill_switch` (200, so Elfa does not retry).
-5. Parse JSON; read `data.queryId`. Unknown queryId → `dropped:unrouted` (200).
-6. KV `seen:<eventId>` exists → `dropped:duplicate` (200). Otherwise write it (TTL 7 d).
-   KV is eventually consistent; a second delivery inside the same few ms can pass. Stated
-   in README; Elfa's cooldown makes it unreachable in practice.
-7. POST to `KEEPERHUB_WEBHOOK_URL/<workflowId>` with `Authorization: Bearer <KEEPERHUB_WEBHOOK_KEY>`
-   and the fixed-shape payload below. Non-2xx → `forwarded:keeperhub_error` with the
-   response body (200 to Elfa). 2xx → `forwarded:ok` with KeeperHub's execution id.
-8. Write `decision:<ts>:<eventId>` to KV (TTL 30 d) and append its key to a rolling index
-   `decisions:recent` (capped at 200).
+1. Read raw body as text; read the three headers. Any missing → **400**, counter only.
+2. Recompute HMAC, constant-time compare → mismatch → **401**, counter only, nothing stored.
+3. Timestamp drift > 30 s either direction → **401** `refused:stale` (persisted — it is signed).
+4. `BRIDGE_ENABLED !== "true"` → **200** `dropped:kill_switch`.
+5. Parse JSON; read `data.queryId`; not in `ROUTES` → **200** `dropped:unrouted`.
+6. KV `seen:<eventId>` present → **200** `dropped:duplicate`; else write (TTL 7 d).
+7. Forward (below). 8. Persist one decision record. Return **200**.
 
-Forwarded payload (fixed shape; **no amounts, no addresses**):
+Forwarding:
+
+- `POST {KEEPERHUB_BASE}/api/workflows/<workflowId>/webhook` — note the trailing
+  `/webhook`; rev 1 had this path wrong.
+- Headers: `Authorization: Bearer <KEEPERHUB_WEBHOOK_KEY>`, `Content-Type: application/json`,
+  **`Idempotency-Key: elfa-<eventId>`**. KeeperHub honours it for 24 h per workflow and
+  replays the original `executionId`, so a retry can never execute twice. This is the real
+  guarantee; the KV dedupe is a cheap first line, not the safety property.
+- Response 2xx → `forwarded:ok` with KeeperHub's `executionId`.
+- 400/401/403/404/410 → `forwarded:permanent_error` with the body; no retry.
+- 429/5xx/network → `forwarded:retrying`; bounded retry inside `ctx.waitUntil` at 2 s, 10 s,
+  30 s honouring `Retry-After`, same idempotency key; final outcome appended to the record.
+  Elfa already has its 200, so it never retry-storms.
+
+Forwarded body — **deterministic for a given event** (KeeperHub rejects a reused
+idempotency key with a changed payload, so `receivedAt` must NOT be in it):
 
 ```json
 {
@@ -149,71 +182,97 @@ Forwarded payload (fixed shape; **no amounts, no addresses**):
   "queryId": "a12d20ff-…",
   "title": "BTC funding flips negative (Binance)",
   "body": "annualized_rate crossed below 0",
-  "observedValue": "-3.21",
-  "triggerTime": "2026-09-06T19:00:00.000Z",
-  "receivedAt": "2026-09-06T19:00:01.104Z"
+  "observedValue": null,
+  "triggerTime": null
 }
 ```
 
-Configuration (Worker secrets / vars)
+`observedValue` / `triggerTime` are read from trigger context **if present** and are `null`
+otherwise. `title` and `body` are truncated to 200 characters and have `{{` and `}}` stripped
+before forwarding, so nothing arriving from outside can become a KeeperHub template. No field
+here is read by any numeric, address, token or chain input in the workflow (invariant §6.2).
+The first live delivery's raw body is stored at `raw:<eventId>` (TTL 7 d) so the trigger-context
+mapping can be corrected from evidence rather than guessed.
+
+Storage layout (no read-modify-write anywhere — KV has no atomic update):
+
+- `seen:<eventId>` → `"1"`, TTL 7 d.
+- `decision:<reverseTs>:<eventId>` → empty value, **decision JSON in KV metadata**, TTL 30 d.
+  `/audit` renders from a single `list({ prefix: "decision:", limit: 200 })`.
+- `raw:<eventId>` → raw body, TTL 7 d.
+
+Config
 
 | Name | Kind | Meaning |
 |---|---|---|
-| `ELFA_SIGNING_SECRET` | secret | Same value passed as `signingSecret` on the Elfa action. Generated by `openssl rand -hex 32`. |
-| `KEEPERHUB_WEBHOOK_KEY` | secret | `wfb_…` from KeeperHub Settings › Developer › Webhook keys. |
-| `KEEPERHUB_WEBHOOK_URL` | var | `https://app.keeperhub.com/api/workflows` |
-| `BRIDGE_ENABLED` | var | `"true"` to forward; anything else = kill switch. |
-| `ROUTES` | var (JSON) | `{ "<elfaQueryId>": "<keeperhubWorkflowId>" }`. Written by `bridge setup`. |
+| `ELFA_SIGNING_SECRET` | secret | same value passed as `signingSecret` on the Elfa action (`openssl rand -hex 32`) |
+| `KEEPERHUB_WEBHOOK_KEY` | secret | `wfb_…` from Settings › Developer › API keys › Webhook keys |
+| `KEEPERHUB_BASE` | var | `https://app.keeperhub.com` |
+| `BRIDGE_ENABLED` | var | `"true"` to forward; anything else = kill switch |
+| `ROUTES` | var (JSON) | `{ "<elfaQueryId>": "<keeperhubWorkflowId>" }`, written by `bridge setup` |
 
-Decision record (what `/audit` shows):
+### 4.3 KeeperHub workflow — "Elfa Auto → de-risk ETH to USDC (Base)"
 
-```json
-{ "at": "…", "eventId": "…", "queryId": "…", "decision": "forwarded:ok",
-  "detail": { "workflowId": "…", "executionId": "…" }, "latencyMs": 412 }
-```
+Created on `app.keeperhub.com` through KeeperHub's MCP (`create_workflow` +
+`validate_workflow`), so it is genuinely agent-authored on the real product.
+Wallet integration `v0dqh167ypmjqxyds6tuh` (`0xDfcF22C371aE8B03d61ff937acB11DC9FF007d98`).
+Telegram: a **new** integration named `elfa-bridge-telegram` — the existing
+`guardian-telegram` name would appear in the on-camera execution log and read as the
+operator's own product.
 
-### 4.3 KeeperHub workflow ("Elfa de-risk: ETH → USDC on Base")
+Fixed values (mainnet, from the live quote 4,978,247):
 
-Created on `app.keeperhub.com` by `bridge setup` through KeeperHub's MCP
-(`create_workflow` + `validate_workflow`), so it is an agent-authored workflow on the
-real product. Wallet integration: the org's existing Base wallet
-(`0xDfcF22C371aE8B03d61ff937acB11DC9FF007d98`, integration `v0dqh167ypmjqxyds6tuh`).
-Notifications: the existing `guardian-telegram` integration (`ircsuib7u5kxv79detk1f`).
-
-Nodes (ids fixed so templates are stable):
-
-| id | action | config (fixed values live here) |
+| Constant | Value | Note |
 |---|---|---|
-| `trigger-1` | Webhook | `webhookSchema` = the forwarded payload |
-| `bal-1` | `web3/check-balance` | chainId 8453, address = org wallet |
-| `cond-bal` | Condition | `{{@bal-1:Balance.balance}} >= AMOUNT_IN_ETH + GAS_RESERVE_ETH` |
-| `quote-1` | `uniswap/quote-exact-input` | chainId 8453, tokenIn WETH `0x4200…0006`, tokenOut USDC `0x8335…2913`, fee 500, amountIn = AMOUNT_IN_ETH |
-| `cond-quote` | Condition | `{{@quote-1:Quote.amountOut}} >= MIN_USDC_OUT` |
-| `swap-1` | `uniswap/swap-exact-input` | same pair, `recipient` = org wallet, `amountIn` = AMOUNT_IN_ETH, `amountOutMinimum` = MIN_USDC_OUT, `ethValue` = AMOUNT_IN_ETH (native ETH in; KeeperHub's write step wraps because `exactInputSingle` is payable) |
-| `tg-ok` | `telegram/send-message` | "Executed: <eventId> <title> → tx {{@swap-1:Swap.transactionHash}}" |
-| `tg-skip-bal` | `telegram/send-message` | "Skipped (balance): …" on `cond-bal` false |
-| `tg-skip-quote` | `telegram/send-message` | "Skipped (quote {{@quote-1:Quote.amountOut}} < floor): …" on `cond-quote` false |
+| `AMOUNT_IN_WEI` | `"2000000000000000"` | 0.002 ETH as a raw 18-decimal integer |
+| `AMOUNT_IN_ETH` | `"0.002"` | same amount, human units, for `ethValue` only |
+| `GAS_RESERVE_ETH` | `0.0005` | |
+| `BALANCE_FLOOR_ETH` | `0.0025` | amount + reserve, compared against a human-ETH string |
+| `MIN_USDC_OUT` (standing) | `"4828900"` | 0.97 × quote — loose enough to still fire days later |
+| `MIN_USDC_OUT` (filming) | 0.995 × fresh quote | set by `--refresh-floor` minutes before filming |
 
-Fixed values for the mainnet run: `AMOUNT_IN_ETH = 0.002` (≈ $5 at the time of writing),
-`GAS_RESERVE_ETH = 0.0005`, `MIN_USDC_OUT` = 0.995 × the quote taken at setup time,
-re-computed by `bridge setup --refresh-floor` before filming. The floor is a **hard-coded
-number in the workflow**, not a percentage computed at run time, so the refusal path is
-deterministic and demonstrable (set the floor above spot → the skip branch fires).
+Nodes:
 
-The Sepolia variant (`--chain 84532`) uses `wrapped/deposit` (WETH) instead of the swap,
-because Uniswap V3 is not registered on Base Sepolia in KeeperHub. Same trigger, same
-conditions, same Telegram nodes.
+| id | actionType | config |
+|---|---|---|
+| `trigger-1` | Webhook trigger | `webhookMockRequest` = the forwarded body (schema is not enforced by the route) |
+| `bal-1` | `web3/check-balance` | `chainId 8453`, `address` = org wallet, `failOnError` **left at true** |
+| `cond-bal` | `Condition` | `{{@bal-1:Check Balance.balance}} >= 0.0025` — output is a **human ETH string**, so this compares correctly |
+| `quote-1` | `uniswap/quote-exact-input` | `network 8453`, tokenIn WETH `0x4200…0006`, tokenOut USDC `0x8335…2913`, `amountIn` = `AMOUNT_IN_WEI`, `fee "500"` |
+| `cond-quote` | `Condition` | `{{@quote-1:Quote.result.amountOut}} >= 4828900` |
+| `swap-1` | `uniswap/swap-exact-input` | same pair/fee, `recipient` = org wallet, `amountIn` = `AMOUNT_IN_WEI`, `amountOutMinimum` = `MIN_USDC_OUT`, **`ethValue` = `"0.002"`** (SwapRouter02 wraps `msg.value`; no approval needed) |
+| `tg-ok` | `telegram/send-message` | `integrationId`, `chatId`, `parseMode: "none"`, "Executed <eventId>: <title> → {{@swap-1:Swap.transactionHash}}" |
+| `tg-skip-bal` | `telegram/send-message` | on `cond-bal` false handle |
+| `tg-skip-quote` | `telegram/send-message` | on `cond-quote` false handle, includes the observed quote |
+
+`amountIn` and `ethValue` must describe the **same** amount in their two different units. If
+`amountIn` exceeds `msg.value` the router tries to pull WETH and reverts; if it is smaller,
+the excess ETH is stranded in the router with no refund path. This pairing is asserted by a
+unit test over the workflow JSON (§6.6).
+
+`parseMode` is `none` because the title "BTC funding flips negative (Binance)" contains
+`(`, `)`, `.` and `-`, all of which Telegram's MarkdownV2 requires escaped; an unescaped
+send returns 400 and would mark the execution failed *after* the swap already succeeded.
+
+Sepolia variant (`--chain 84532`): Uniswap V3 is not registered on 84532, so there is no
+quote and no `cond-quote`. Nodes: trigger → `bal-1` → `cond-bal` → `wrapped/wrap`
+(`network 84532`, `ethValue "0.002"`) → Telegram. The quote-floor refusal path is
+mainnet-only, and the README says so.
 
 ### 4.4 CLI (`cli/`)
 
-Node 20+, TypeScript, run with `npx tsx`. Reads `.env`. Commands:
+Node 20+, TypeScript, `npx tsx`, reads `.env`.
 
 | Command | Does |
 |---|---|
-| `bridge setup [--film] [--chain 8453\|84532]` | Creates/validates the KeeperHub workflow via MCP HTTP, creates the Elfa plan (validate → create), writes `ROUTES` to the Worker via `wrangler secret`/vars, prints both ids. Idempotent: re-running updates rather than duplicates (keys on title). |
-| `bridge fire [--event-id X] [--stale] [--bad-sig]` | Builds a synthetic Elfa event, signs it with `ELFA_SIGNING_SECRET`, POSTs to the Worker. Flags produce the failure cases for the demo. |
-| `bridge status` | Elfa plan state (`latestEvaluation`), last 10 Worker decisions, last KeeperHub execution. |
-| `bridge teardown` | Cancels Elfa plans created by setup; leaves the workflow. |
+| `bridge setup [--film] [--chain 8453\|84532] [--refresh-floor]` | creates/updates the workflow via MCP, deploys nothing (see order below), creates the Elfa plan after validating it, writes `ROUTES`, prints both ids. Idempotent on title. |
+| `bridge fire [--event-id X] [--stale] [--bad-sig] [--unrouted]` | builds a synthetic Elfa event, signs it, POSTs to the Worker — the demo's failure cases |
+| `bridge status` | Elfa `latestEvaluation` **and its age**, last 10 Worker decisions, last KeeperHub execution, remaining daily cap |
+| `bridge teardown` | cancels plans created by setup (frees free-tier capacity), leaves the workflow |
+
+Order enforced by `setup`: workflow → **Worker must already be deployed and resolving** →
+Elfa plan. `setup` calls `GET /health` on the Worker URL first and refuses with a clear
+message if it does not answer, because Elfa's validate rejects an unresolvable host.
 
 ### 4.5 Repository layout
 
@@ -221,99 +280,102 @@ Node 20+, TypeScript, run with `npx tsx`. Reads `.env`. Commands:
 elfa-keeperhub-bridge/
   README.md                      problem first (~30 %), then what it is, then run it
   docs/superpowers/specs/…       this file
-  worker/                        src/index.ts, src/verify.ts, src/store.ts, src/forward.ts, test/
-  cli/                           src/setup.ts, fire.ts, status.ts, teardown.ts, elfa.ts, keeperhub.ts
-  workflow/                      keeperhub-workflow.base.json, keeperhub-workflow.sepolia.json (exported)
+  worker/                        src/{index,verify,store,forward}.ts, test/
+  cli/                           src/{setup,fire,status,teardown,elfa,keeperhub}.ts
+  workflow/                      keeperhub-workflow.base.json, .sepolia.json, action-schemas.fixture.json
   video/STORYBOARD.md            with fact-provenance table (standing rule)
   wrangler.toml, package.json, .env.example
 ```
 
 ## 5. Failure handling
 
-| Failure | Where caught | Outcome |
+| Failure | Caught where | Outcome |
 |---|---|---|
-| Elfa retries a delivery | Worker step 6 | `dropped:duplicate`, 200 |
-| Replay of a captured request | Worker step 2 | `refused:stale`, 401 |
-| Forged or tampered request | Worker step 3 | `refused:bad_signature`, 401 |
+| Forged / tampered request | Worker step 2 | 401, **not persisted**, counted in `/health` |
+| Unsigned flood | Worker step 2 | 401, zero KV writes, dedupe budget intact |
+| Replay of a captured request | Worker step 3 | 401 `refused:stale` |
+| Elfa retries a delivery | Worker step 6, then KeeperHub `Idempotency-Key` | at most one execution |
 | Operator paused the bridge | Worker step 4 | `dropped:kill_switch`, 200 |
-| Elfa plan not mapped | Worker step 5 | `dropped:unrouted`, 200 |
-| KeeperHub 4xx/5xx (bad key, workflow paused, quota) | Worker step 7 | `forwarded:keeperhub_error` + body, 200 to Elfa |
+| Plan not mapped | Worker step 5 | `dropped:unrouted`, 200 |
+| KeeperHub 4xx (bad key, paused, missing) | forward classify | `forwarded:permanent_error` + body |
+| KeeperHub 429/5xx | forward classify | bounded retry, same key, outcome appended |
 | Wallet below amount + reserve | `cond-bal` | Telegram "skipped (balance)", no tx |
-| Price moved so quote < floor | `cond-quote` | Telegram "skipped (quote)", no tx |
-| Swap reverts on-chain | KeeperHub write step (simulation preflight) | Execution fails in KeeperHub's log; Worker already returned 200 |
-| Runaway condition | Elfa `repeat.cooldown` 24 h, `maxTriggers` 3; KeeperHub spending limits | Bounded loss |
+| Quote below floor | `cond-quote` | Telegram "skipped (quote …)", no tx |
+| RPC failure on balance read | `failOnError` left true | run fails loudly — never a false "balance too low" |
+| Daily cap (0.0055 ETH) exhausted | KeeperHub | execution refused; `bridge status` shows remaining cap |
+| Swap reverts | KeeperHub simulation preflight | execution marked failed in the log |
+| Runaway condition | `repeat` cooldown 24 h, `maxTriggers` 3, spending cap, kill switch | bounded loss |
 
-The Worker returns 200 for everything after signature verification so Elfa never
-retry-storms; the audit log, not the HTTP status, is the source of truth.
+After signature verification the Worker returns 200 for everything, so Elfa never
+retry-storms. The audit log, not the HTTP status, is the record.
 
-## 6. Security invariants (assert in tests)
+## 6. Invariants (asserted by tests)
 
-1. The Worker never forwards a request whose signature failed, whatever else is true.
-2. The forwarded payload contains no field that the workflow uses as an amount, address,
-   token or chain. (Test: schema of forwarded payload has none of those keys, and the
-   workflow JSON has no template referencing `trigger-1` in any numeric/address field.)
-3. Two deliveries with the same `X-Auto-Event-Id` produce at most one forward (modulo the
-   documented KV race).
-4. `BRIDGE_ENABLED` unset ⇒ nothing is forwarded.
-5. Secrets never appear in `/audit`, `/health` or logs.
+1. A request whose signature fails is never forwarded, whatever else is true.
+2. No field of the forwarded body is read by any numeric, address, token or chain input in
+   the workflow JSON — asserted by scanning every node config for `trigger-1` references.
+3. Two deliveries with the same event id produce at most one KeeperHub execution.
+4. `BRIDGE_ENABLED` unset ⇒ nothing forwarded.
+5. Secrets never appear in `/audit`, `/health`, logs or error bodies.
+6. `swap-1.amountIn` (wei) and `swap-1.ethValue` (ETH) describe the same amount.
+7. A failed-signature request performs zero KV writes.
 
 ## 7. Testing
 
-1. **Unit (vitest + `@cloudflare/vitest-pool-workers`)**: verify.ts (good sig, bad sig,
-   drift ±31 s, missing headers), store.ts (dedupe, index cap), forward.ts (payload shape,
-   error capture), index.ts (kill switch, unrouted, ordering of checks). Target: every row
-   in §5 that the Worker owns has a test.
-2. **Workflow JSON**: a test loads `workflow/*.json` and asserts invariant §6.2, every
-   Condition edge has a `sourceHandle`, and every action type exists in KeeperHub's
-   `list_action_schemas` snapshot (committed fixture).
-3. **End-to-end, Sepolia (free)**: `bridge setup --chain 84532`, then `bridge fire`;
-   assert a KeeperHub execution with a `transactionHash` on Base Sepolia and an
-   `/audit` row `forwarded:ok`. Then `bridge fire --event-id <same>` → `dropped:duplicate`.
-4. **End-to-end, mainnet (once, filmed)**: `bridge setup --film`, wait for Elfa to fire,
-   confirm Basescan tx of the swap, Telegram message, `/audit` row.
-5. **Adversarial review** before submission (`/code-review high`), per house rule.
+1. **Unit** (vitest + `@cloudflare/vitest-pool-workers`): verify (good/bad sig, ±31 s drift,
+   missing headers), store (dedupe, metadata listing), forward (payload determinism,
+   idempotency header, error classification, retry schedule), index (check ordering, kill
+   switch, unrouted). Every Worker-owned row in §5 gets a test.
+2. **Workflow JSON**: invariants 2 and 6; every Condition edge carries a `sourceHandle`;
+   every `actionType` exists in the committed `action-schemas.fixture.json`.
+3. **Manual mainnet dry run, day 1, before any Worker code** — run the workflow by hand with
+   `webhookMockRequest` ($5 of real value). This is the single riskiest step; proving it
+   first means the rest is deterministic and offline-testable.
+4. **End-to-end Sepolia (free)**: `setup --chain 84532`, `fire`, assert a wrap tx hash and an
+   `/audit` row; re-fire the same event id → `dropped:duplicate`.
+5. **End-to-end mainnet (once, filmed)**: `setup --film`, wait for the fire, confirm Basescan,
+   Telegram, `/audit`.
+6. **Adversarial review** (`/code-review high`) before submission — house rule.
 
 ## 8. Demo video (main track, 2–3 min, face + voice, problem first)
 
 | t | Beat | On screen |
 |---|---|---|
-| 0:00–0:40 | Problem. Elfa fires alerts; it removed order execution; everyone now hand-rolls a runner; that runner is the thing that double-fires. | Elfa docs quote, then the hand-rolled-runner failure list |
-| 0:40–1:05 | Shape. Elfa decides when, KeeperHub decides how, the bridge proves who and not-again. | The §3 diagram |
-| 1:05–2:10 | Live. Create the film plan on camera (`bridge setup --film`); Elfa evaluates; Worker `/audit` shows `forwarded:ok`; KeeperHub execution log runs bal → quote → swap → Telegram; Basescan shows the swap. | Split screen: terminal, KeeperHub, Basescan, Telegram |
-| 2:10–2:35 | Reliability. `bridge fire --event-id <same>` → duplicate dropped. `--bad-sig` → refused. Floor above spot → workflow skip branch. | `/audit` rows appearing |
-| 2:35–2:55 | What's running now: the funding-flip plan live through judging; workflow was agent-authored via MCP; repo link. | README, KeeperHub workflow page |
+| 0:00–0:40 | Problem: Elfa fires alerts, removed order execution, told everyone to build their own runner — and that runner is what double-fires | the Elfa docs sentence |
+| 0:40–1:05 | Shape: Elfa decides when, KeeperHub decides how, the bridge proves who and not-again | §3 diagram |
+| 1:05–2:10 | Live: plan fires → `/audit` `forwarded:ok` → KeeperHub log bal → quote → swap → Telegram → Basescan | split screen |
+| 2:10–2:35 | Reliability: same event id → duplicate dropped; `--bad-sig` → refused; floor above spot → skip branch | `/audit` rows |
+| 2:35–2:55 | What's live now: the funding plan through judging; workflow authored via MCP; repo | KeeperHub workflow page |
 
-Bounty video (separate BUIDL): 60–90 s screen capture, no voiceover, per the Discord answer.
+Bounty video is separate: 60–90 s screen capture, no voiceover, per the organisers' Discord answer.
 
-## 9. Submission checklist (main track BUIDL)
+## 9. Submission checklist
 
-- Repo public with README (problem first), `bridge setup` reproducible.
-- Live URL: the Worker's `/audit` page.
-- Video link.
-- Transaction link: the Basescan swap tx from the filmed run.
-- Surfaces used: hosted app, MCP (workflow authoring), webhook trigger, Uniswap + Telegram plugins.
-- Testnet or mainnet: mainnet (Base), with Sepolia path documented.
+Public repo with problem-first README · live URL = the Worker's `/audit` · video link ·
+transaction link = the filmed Basescan swap · surfaces used: hosted app, MCP authoring,
+webhook trigger, Uniswap + Telegram plugins · mainnet (Base), Sepolia path documented.
 
-## 10. Costs and operator (Dami) actions
+## 10. Costs and operator actions
 
 | Item | Cost | Who |
 |---|---|---|
-| Elfa plans | 5 credits each (free tier, 1,000/mo) | CLI |
-| Cloudflare Workers + KV | free tier | Dami: `npx wrangler login` once (interactive) |
+| Elfa plans | 5 credits each (1,000/mo free) | CLI |
+| Cloudflare Workers + KV | free tier (1,000 writes/day — §4.2 protects it) | Dami: `npx wrangler login` once, interactive |
 | KeeperHub webhook key | free | Dami: Settings › Developer › API keys › Webhook keys |
-| KeeperHub org wallet on Base | ≈ $10 ETH (0.002 swapped + reserve) | Dami: fund `0xDfcF…7d98`; gas is sponsored by KeeperHub |
-| Telegram | existing integration | none |
+| Telegram | free | Dami: create `elfa-bridge-telegram` integration + supply the chat id |
+| Base ETH | ~$10 (0.002 per run, cap 0.0055/day) | Dami: fund `0xDfcF…7d98` |
 
 ## 11. Risks and open questions
 
-- **KV race** (§4.2 step 6): documented, not solved. Durable Objects would solve it; out of scope.
-- **Elfa webhook host allowlist**: the skill text says "allowlisted host"; the docs page does
-  not mention one. First `bridge setup` run will tell. If allowlisting is required, the
-  Worker URL is added in Elfa's dashboard; no design change.
-- **Native ETH swap path**: KeeperHub's write step treats `exactInputSingle` as payable and
-  expects `tokenIn = WETH` with `ethValue` set. If the hosted build differs, fall back to
-  `wrapped/deposit` + ERC-20 `approve-token` + swap (three nodes instead of one).
-- **Funding-flip may not fire during judging.** The story does not depend on it; the
-  filmed run and the `bridge fire` reproduction do.
-- **Calendar**: this competes with AWS (Sep 14) and Commons (Sep 17). Build budget is
-  three focused days; anything beyond §4 is cut, not stretched.
+- **Trigger context in webhook bodies is undocumented.** Handled by making both fields
+  nullable and storing the first raw body; no message depends on them.
+- **Free-tier Auto access is documented as Grow-only** yet a create succeeded on 2026-09-06.
+  Treat access as not guaranteed: keep ≤2 active plans, `teardown` before `setup --film`,
+  and have `bridge status` show the age of the last evaluation so a stalled plan is visible.
+- **Standing floor at 0.97 will still refuse if ETH runs hard.** That is the honest design —
+  refuse rather than swap badly — and the README says so.
+- **Gas sponsorship is unverified.** The daily cap is known (0.0055 ETH) and charged against
+  payable value; gas on top is assumed sponsored but not proven. Day-1 manual run settles it.
+- **Elfa's retry schedule is undocumented.** The idempotency key makes it irrelevant.
+- **Calendar.** This competes with AWS (Sep 14) and Commons (Sep 17). Budget is three focused
+  days; anything past §4 is cut, not stretched.
