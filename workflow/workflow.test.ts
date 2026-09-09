@@ -31,10 +31,53 @@ const MONEY_FIELDS = [
 const TELEGRAM_INTEGRATION_ID_PLACEHOLDER = "TELEGRAM_INTEGRATION_ID";
 const TELEGRAM_CHAT_ID_PLACEHOLDER = "TELEGRAM_CHAT_ID";
 
+/**
+ * Exact, non-lossy ETH-decimal-string -> wei conversion. Used instead of
+ * Number()/1e18 float math so a comparison against amountIn can never pass
+ * or fail because of floating-point rounding.
+ */
+function ethToWei(ethStr: string): bigint {
+  const [wholeRaw, fracRaw = ""] = ethStr.split(".");
+  const whole = wholeRaw === "" ? "0" : wholeRaw;
+  const frac = (fracRaw + "0".repeat(18)).slice(0, 18);
+  return BigInt(whole) * 10n ** 18n + BigInt(frac || "0");
+}
+
+/**
+ * Flattens a node's config into path-keyed leaves so a trigger-1 reference
+ * buried inside a nested object or array (config.params.recipient,
+ * config.args[0], ...) is still found. The "field name" used against
+ * MONEY_FIELDS is the leaf's own property name, e.g. "recipient" out of
+ * "meta.recipient".
+ */
+function flattenConfig(
+  config: Record<string, unknown>,
+  prefix: string[] = []
+): Array<{ field: string; value: unknown }> {
+  const out: Array<{ field: string; value: unknown }> = [];
+  for (const [key, value] of Object.entries(config)) {
+    const path = [...prefix, key];
+    if (Array.isArray(value)) {
+      value.forEach((item, i) => {
+        if (item !== null && typeof item === "object") {
+          out.push(...flattenConfig(item as Record<string, unknown>, [...path, `[${i}]`]));
+        } else {
+          out.push({ field: key, value: item });
+        }
+      });
+    } else if (value !== null && typeof value === "object") {
+      out.push(...flattenConfig(value as Record<string, unknown>, path));
+    } else {
+      out.push({ field: key, value });
+    }
+  }
+  return out;
+}
+
 describe.each(workflows)("%s workflow", (_name, wf) => {
-  it("references the trigger only in human-readable message text", () => {
+  it("references the trigger only in human-readable message text, even nested", () => {
     for (const node of wf.nodes) {
-      for (const [field, value] of Object.entries(node.data.config)) {
+      for (const { field, value } of flattenConfig(node.data.config)) {
         if (typeof value !== "string") continue;
         if (!value.includes("trigger-1")) continue;
         expect(MONEY_FIELDS).not.toContain(field);
@@ -99,17 +142,33 @@ describe.each(workflows)("%s workflow", (_name, wf) => {
       expect(node.data.config.chatId).toBe(TELEGRAM_CHAT_ID_PLACEHOLDER);
     }
   });
+
+  it("compares balance with a numeric operator, never strict equality", () => {
+    const cond = wf.nodes.find((n) => n.id === "cond-bal")!.data.config.condition as string;
+    expect(cond).toMatch(/>=/);
+    expect(cond).not.toContain("===");
+  });
+
+  it("pins the balance floor to 0.0025 ETH", () => {
+    const cond = wf.nodes.find((n) => n.id === "cond-bal")!.data.config.condition as string;
+    expect(cond).toContain("0.0025");
+  });
 });
 
 describe("base workflow money values", () => {
   const wf = base as Workflow;
   const node = (id: string) => wf.nodes.find((n) => n.id === id)!.data.config;
 
-  it("expresses the same amount as wei on amountIn and as ETH on ethValue", () => {
+  it("expresses the same amount as wei on amountIn and as ETH on ethValue (exact, no float)", () => {
     const swap = node("swap-1");
-    const wei = BigInt(swap.amountIn as string);
-    const eth = Number(swap.ethValue as string);
-    expect(Number(wei) / 1e18).toBeCloseTo(eth, 12);
+    expect(BigInt(swap.amountIn as string)).toBe(ethToWei(swap.ethValue as string));
+  });
+
+  it("moves exactly the approved amount: 2000000000000000 wei / 0.002 ETH, not a nearby figure", () => {
+    const swap = node("swap-1");
+    expect(swap.amountIn).toBe("2000000000000000");
+    expect(swap.ethValue).toBe("0.002");
+    expect(node("quote-1").amountIn).toBe("2000000000000000");
   });
 
   it("quotes exactly the amount it swaps", () => {
@@ -122,13 +181,13 @@ describe("base workflow money values", () => {
     expect(node("swap-1").amountOutMinimum).toBe(floor);
   });
 
-  it("reads the quote through the result wrapper, not the bare field", () => {
-    expect(node("cond-quote").condition).toContain("Quote.result.amountOut");
+  it("pins the swap floor to the approved minimum-out, 4828900", () => {
+    expect(node("swap-1").amountOutMinimum).toBe("4828900");
+    expect(node("cond-quote").condition).toContain("4828900");
   });
 
-  it("compares balance with a numeric operator, never strict equality", () => {
-    expect(node("cond-bal").condition).toMatch(/>=/);
-    expect(node("cond-bal").condition).not.toContain("===");
+  it("reads the quote through the result wrapper, not the bare field", () => {
+    expect(node("cond-quote").condition).toContain("Quote.result.amountOut");
   });
 
   it("swaps WETH for USDC on Base at the 0.05 percent tier", () => {
@@ -142,18 +201,40 @@ describe("base workflow money values", () => {
   it("keeps a single run inside the 0.0055 ETH daily cap", () => {
     expect(BigInt(node("swap-1").amountIn as string)).toBeLessThan(5_500_000_000_000_000n);
   });
+
+  it("keeps the balance floor above the amount moved, so the gas reserve survives", () => {
+    const guard = node("cond-bal").condition as string;
+    const floor = Number(guard.match(/>=\s*([\d.]+)/)![1]);
+    const moved = Number(node("swap-1").ethValue as string);
+    expect(floor).toBeGreaterThan(moved);
+  });
+});
+
+describe("sepolia workflow money values", () => {
+  const wf = sepolia as Workflow;
+  const node = (id: string) => wf.nodes.find((n) => n.id === id)!.data.config;
+
+  it("wraps exactly the approved amount: 0.002 ETH", () => {
+    expect(node("wrap-1").ethValue).toBe("0.002");
+  });
+
+  it("keeps a single run inside the 0.0055 ETH daily cap", () => {
+    expect(ethToWei(node("wrap-1").ethValue as string)).toBeLessThan(5_500_000_000_000_000n);
+  });
+
+  it("keeps the balance floor above the amount moved, so the gas reserve survives", () => {
+    const guard = node("cond-bal").condition as string;
+    const floor = Number(guard.match(/>=\s*([\d.]+)/)![1]);
+    const moved = Number(node("wrap-1").ethValue as string);
+    expect(floor).toBeGreaterThan(moved);
+  });
 });
 
 describe("bal-1 fails loudly, never silently", () => {
-  it("never sets failOnError to anything but true on the balance check", () => {
+  it("sets failOnError to true on the balance check — absence is also a defect", () => {
     for (const [, wf] of workflows) {
       const bal = wf.nodes.find((n) => n.id === "bal-1")!.data.config;
-      // failOnError is optional-but-if-present-must-be-true; KeeperHub's
-      // documented default for web3/check-balance is to fail loudly already,
-      // so absence is also acceptable — only an explicit false is a defect.
-      if ("failOnError" in bal) {
-        expect(bal.failOnError).toBe(true);
-      }
+      expect(bal.failOnError).toBe(true);
     }
   });
 });
