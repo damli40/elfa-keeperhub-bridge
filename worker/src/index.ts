@@ -20,13 +20,48 @@ export const VERSION = "1.0.0";
  */
 let rejectedUnsigned = 0;
 
+/**
+ * Requests whose decision-record persistence itself failed (KV cap exceeded, quota exhausted,
+ * transient error). Counted rather than allowed to 500 the response: the spec requires the
+ * Worker to always return 200 after signature verification so Elfa never retry-storms, and a
+ * failed `recordDecision` must not become the exception to that rule.
+ */
+let failedPersists = 0;
+
+/**
+ * Parses ROUTES into a lookup with no prototype chain (`Object.create(null)`) and copies only
+ * own, string-valued entries. Two independent guards against the same bug: a queryId of
+ * `"constructor"`, `"__proto__"`, `"toString"` or `"valueOf"` must never resolve to an inherited
+ * Object.prototype function and be treated as a truthy workflow id — that would pass the
+ * unrouted gate, burn a `seen:`/`raw:` KV write, and forward to a garbage URL.
+ */
 export function parseRoutes(raw: string): Record<string, string> {
+  const routes: Record<string, string> = Object.create(null);
   try {
-    const parsed = JSON.parse(raw || "{}");
-    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, string>) : {};
+    const parsed: unknown = JSON.parse(raw || "{}");
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return routes;
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof value === "string") routes[key] = value;
+    }
+    return routes;
   } catch {
-    return {};
+    return routes;
   }
+}
+
+/** Own-property, type-checked route lookup — belt and braces alongside parseRoutes's null-prototype map. */
+function resolveWorkflowId(routes: Record<string, string>, queryId: string): string | undefined {
+  if (!Object.hasOwn(routes, queryId)) return undefined;
+  const value = routes[queryId];
+  return typeof value === "string" ? value : undefined;
+}
+
+/** Caps a Decision's top-level queryId to the same 200-char budget as title/body/observedValue in
+ * forward.ts's sanitize(). fitToBudget in store.ts only shrinks strings inside `detail`, so an
+ * unbounded top-level queryId can push metadata past Cloudflare's 1024-byte cap and make
+ * `kv.put` throw — losing the audit record for exactly the request that most needs one. */
+function boundedQueryId(queryId: string | null, max = 200): string | null {
+  return queryId === null ? null : queryId.slice(0, max);
 }
 
 function escapeHtml(value: unknown): string {
@@ -53,7 +88,28 @@ code{font-size:12px;word-break:break-all}</style>
 <table><thead><tr><th>at</th><th>event</th><th>query</th><th>decision</th><th>detail</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-async function forwardWithRetry(env: Env, ctx: ExecutionContext, workflowId: string, payload: ForwardPayload, base: Decision): Promise<Decision> {
+/** Real production delay. Tests inject a fake so the 2s/10s/30s schedule doesn't have to
+ * actually elapse in CI; the production schedule itself (RETRY_DELAYS_MS) is untouched. */
+const realSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Persists a Decision, swallowing (and counting) any KV failure so a failed audit write can
+ * never turn the spec's "always 200 after signature verification" into a 500. */
+async function safeRecordDecision(kv: KVNamespace, decision: Decision): Promise<void> {
+  try {
+    await recordDecision(kv, decision);
+  } catch {
+    failedPersists++;
+  }
+}
+
+export async function forwardWithRetry(
+  env: Env,
+  ctx: ExecutionContext,
+  workflowId: string,
+  payload: ForwardPayload,
+  base: Decision,
+  sleep: (ms: number) => Promise<void> = realSleep,
+): Promise<Decision> {
   const first = await postOnce(env, workflowId, payload);
   const verdict = classify(first.status);
 
@@ -71,11 +127,11 @@ async function forwardWithRetry(env: Env, ctx: ExecutionContext, workflowId: str
       let last = first;
       for (const defaultDelay of RETRY_DELAYS_MS) {
         const delay = last.retryAfterMs ?? defaultDelay;
-        await new Promise((resolve) => setTimeout(resolve, delay));
+        await sleep(delay);
         const retry = await postOnce(env, workflowId, payload);
         last = retry;
         if (classify(retry.status) === "ok") {
-          await recordDecision(env.BRIDGE, {
+          await safeRecordDecision(env.BRIDGE, {
             ...base,
             at: new Date().toISOString(),
             decision: "forwarded:ok_after_retry",
@@ -84,7 +140,7 @@ async function forwardWithRetry(env: Env, ctx: ExecutionContext, workflowId: str
           return;
         }
         if (classify(retry.status) === "permanent") {
-          await recordDecision(env.BRIDGE, {
+          await safeRecordDecision(env.BRIDGE, {
             ...base,
             at: new Date().toISOString(),
             decision: "forwarded:permanent_error",
@@ -93,7 +149,7 @@ async function forwardWithRetry(env: Env, ctx: ExecutionContext, workflowId: str
           return;
         }
       }
-      await recordDecision(env.BRIDGE, {
+      await safeRecordDecision(env.BRIDGE, {
         ...base,
         at: new Date().toISOString(),
         decision: "forwarded:gave_up",
@@ -132,7 +188,11 @@ async function handleElfa(request: Request, env: Env, ctx: ExecutionContext): Pr
 
   const base: Decision = { at: new Date().toISOString(), eventId: headers.eventId, queryId: null, decision: "" };
   const finish = async (decision: Decision, status: number): Promise<Response> => {
-    await recordDecision(env.BRIDGE, { ...decision, latencyMs: Date.now() - startedAt });
+    await safeRecordDecision(env.BRIDGE, {
+      ...decision,
+      queryId: boundedQueryId(decision.queryId),
+      latencyMs: Date.now() - startedAt,
+    });
     return new Response(decision.decision, { status });
   };
 
@@ -154,7 +214,7 @@ async function handleElfa(request: Request, env: Env, ctx: ExecutionContext): Pr
   // Ruling 1: route on the RAW queryId, never the sanitised copy — sanitising is many-to-one,
   // so a legitimate id containing a stripped sequence would otherwise silently fail to route.
   const queryId = (parsed as { data?: { queryId?: string } })?.data?.queryId ?? null;
-  const workflowId = queryId ? parseRoutes(env.ROUTES)[queryId] : undefined;
+  const workflowId = queryId ? resolveWorkflowId(parseRoutes(env.ROUTES), queryId) : undefined;
   if (!queryId || !workflowId) {
     return finish({ ...base, queryId, decision: "dropped:unrouted" }, 200);
   }
@@ -193,6 +253,7 @@ export default {
         routes: Object.keys(parseRoutes(env.ROUTES)).length,
         version: VERSION,
         rejectedUnsigned,
+        failedPersists,
       });
     }
 

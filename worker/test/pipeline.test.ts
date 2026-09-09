@@ -1,6 +1,8 @@
 import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
-import worker from "../src/index";
+import worker, { forwardWithRetry } from "../src/index";
+import type { ForwardPayload } from "../src/forward";
+import type { Decision } from "../src/store";
 
 const SECRET = "a".repeat(64);
 
@@ -157,6 +159,64 @@ describe("POST /elfa", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
     expect((await env.BRIDGE.list()).keys).toHaveLength(0);
   });
+
+  // FINDING 1: a queryId that shadows an inherited Object.prototype member ("constructor",
+  // "__proto__", "toString", "valueOf") must never resolve to a truthy workflow id via a
+  // prototype-chain lookup. It must be treated exactly like any other unrouted queryId: no
+  // fetch, no seen:/raw: KV write, dropped:unrouted.
+  it("treats prototype-chain queryIds as unrouted, not a routing bypass", async () => {
+    for (const bait of ["constructor", "__proto__", "toString", "valueOf"]) {
+      await wipe();
+      const fetchSpy = vi.spyOn(globalThis, "fetch");
+      const res = await call(await signedRequest({ queryId: bait }));
+      expect(res.status).toBe(200);
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      const keys = (await env.BRIDGE.list()).keys.map((k) => k.name);
+      expect(keys.filter((k) => k.startsWith("seen:") || k.startsWith("raw:"))).toHaveLength(0);
+
+      const audit = await (await call(new Request("https://bridge.test/audit"))).json();
+      expect(audit[0]).toMatchObject({ decision: "dropped:unrouted" });
+      fetchSpy.mockRestore();
+    }
+  });
+
+  // FINDING 2: an oversized top-level queryId must not push the decision record's metadata
+  // past Cloudflare's 1024-byte cap and make kv.put throw. The record must still be written,
+  // bounded to the same 200-char budget as title/body/observedValue.
+  it("still writes a decision record for an oversized queryId instead of losing it to the KV metadata cap", async () => {
+    const hugeQueryId = "x".repeat(5000);
+    const res = await call(await signedRequest({ queryId: hugeQueryId }));
+    expect(res.status).toBe(200);
+
+    const audit = await (await call(new Request("https://bridge.test/audit"))).json();
+    expect(audit[0]).toMatchObject({ decision: "dropped:unrouted" });
+    expect(typeof audit[0].queryId).toBe("string");
+    expect(audit[0].queryId.length).toBeLessThanOrEqual(200);
+  });
+
+  // FINDING 3: a KV failure while persisting the decision record must not turn the spec's
+  // "always 200 after signature verification" into a 500 — that 500 is exactly the retry-storm
+  // the whole design exists to prevent. The failure must instead be counted and surfaced on
+  // /health.
+  it("returns 200 even when persisting the decision record fails, and counts it on /health", async () => {
+    const real = env.BRIDGE;
+    const brokenKV = new Proxy(real, {
+      get(target, prop) {
+        if (prop === "put") return async () => { throw new Error("kv put failed"); };
+        const value = (target as unknown as Record<string, unknown>)[prop as string];
+        return typeof value === "function" ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+      },
+    });
+
+    const before = (await (await call(new Request("https://bridge.test/health"))).json()) as { failedPersists: number };
+
+    const res = await call(await signedRequest({}), testEnv({ BRIDGE_ENABLED: "false", BRIDGE: brokenKV } as never));
+    expect(res.status).toBe(200);
+
+    const after = (await (await call(new Request("https://bridge.test/health"))).json()) as { failedPersists: number };
+    expect(after.failedPersists).toBeGreaterThan(before.failedPersists);
+  });
 });
 
 describe("GET /audit", () => {
@@ -165,5 +225,132 @@ describe("GET /audit", () => {
     const res = await call(new Request("https://bridge.test/audit?format=html"));
     expect(res.headers.get("content-type")).toContain("text/html");
     expect(await res.text()).toContain("<table");
+  });
+});
+
+// FINDING 4: forwardWithRetry's background loop was previously untestable — real setTimeout at
+// 2s/10s/30s. It now takes an injectable `sleep` dependency (defaulting to the real timer in
+// production) so these tests can supply an instant fake instead of waiting on the wall clock.
+describe("retry runner (forwardWithRetry)", () => {
+  beforeEach(wipe);
+  afterEach(() => vi.restoreAllMocks());
+
+  function retryEnv() {
+    return {
+      ...env,
+      ELFA_SIGNING_SECRET: SECRET,
+      KEEPERHUB_WEBHOOK_KEY: "wfb_test",
+      KEEPERHUB_BASE: "https://app.keeperhub.com",
+      BRIDGE_ENABLED: "true",
+      ROUTES: JSON.stringify({ q1: "wf1" }),
+    } as never;
+  }
+
+  function payload(eventId: string): ForwardPayload {
+    return {
+      source: "elfa-auto",
+      eventId,
+      queryId: "q1",
+      title: "t",
+      body: "b",
+      observedValue: null,
+      triggerTime: null,
+    };
+  }
+
+  function base(eventId: string): Decision {
+    return { at: new Date().toISOString(), eventId, queryId: "q1", decision: "" };
+  }
+
+  async function latestDecision(): Promise<Decision> {
+    const listed = await env.BRIDGE.list<Decision>({ prefix: "decision:" });
+    return listed.keys[0].metadata as Decision;
+  }
+
+  it("succeeds on the second attempt and records forwarded:ok_after_retry", async () => {
+    let calls = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      calls++;
+      if (calls === 1) return new Response("server error", { status: 500 });
+      return new Response(JSON.stringify({ executionId: "x2" }), { status: 200 });
+    });
+    const ctx = createExecutionContext();
+    const delays: number[] = [];
+    const fakeSleep = async (ms: number) => {
+      delays.push(ms);
+    };
+
+    const outcome = await forwardWithRetry(retryEnv(), ctx, "wf1", payload("retry-1"), base("retry-1"), fakeSleep);
+    expect(outcome.decision).toBe("forwarded:retrying");
+    await waitOnExecutionContext(ctx);
+
+    const stored = await latestDecision();
+    expect(stored.decision).toBe("forwarded:ok_after_retry");
+    expect(stored.detail).toMatchObject({ executionId: "x2" });
+    expect(delays).toEqual([2000]);
+  });
+
+  it("gives up after exhausting all retry attempts", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("still down", { status: 500 }));
+    const ctx = createExecutionContext();
+    const delays: number[] = [];
+    const fakeSleep = async (ms: number) => {
+      delays.push(ms);
+    };
+
+    await forwardWithRetry(retryEnv(), ctx, "wf1", payload("retry-2"), base("retry-2"), fakeSleep);
+    await waitOnExecutionContext(ctx);
+
+    const stored = await latestDecision();
+    expect(stored.decision).toBe("forwarded:gave_up");
+    expect(delays).toEqual([2000, 10000, 30000]);
+  });
+
+  it("reuses the same Idempotency-Key and the same payload bytes on every attempt", async () => {
+    const idempotencyKeys: string[] = [];
+    const bodies: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      const headers = init?.headers as Record<string, string>;
+      idempotencyKeys.push(headers["Idempotency-Key"]);
+      bodies.push(String(init?.body));
+      return new Response("still down", { status: 500 });
+    });
+    const ctx = createExecutionContext();
+    const fakeSleep = async () => {};
+
+    await forwardWithRetry(retryEnv(), ctx, "wf1", payload("retry-3"), base("retry-3"), fakeSleep);
+    await waitOnExecutionContext(ctx);
+
+    expect(idempotencyKeys.length).toBeGreaterThan(1);
+    expect(new Set(idempotencyKeys)).toEqual(new Set(["elfa-retry-3"]));
+    expect(new Set(bodies).size).toBe(1);
+  });
+
+  it("honours a retryAfterMs returned on the SECOND attempt before scheduling the third", async () => {
+    let calls = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      calls++;
+      if (calls === 2) return new Response("rate limited", { status: 429, headers: { "Retry-After": "5" } });
+      if (calls === 3) return new Response(JSON.stringify({ executionId: "x3" }), { status: 200 });
+      return new Response("server error", { status: 500 });
+    });
+    const ctx = createExecutionContext();
+    const delays: number[] = [];
+    const fakeSleep = async (ms: number) => {
+      delays.push(ms);
+    };
+
+    await forwardWithRetry(retryEnv(), ctx, "wf1", payload("retry-4"), base("retry-4"), fakeSleep);
+    await waitOnExecutionContext(ctx);
+
+    // delays[0]: before the 2nd fetch call. The FIRST postOnce carried no Retry-After, so this
+    // is the default RETRY_DELAYS_MS[0] = 2000.
+    // delays[1]: before the 3rd fetch call. The SECOND attempt returned Retry-After: 5s, so this
+    // must be 5000 — not the default RETRY_DELAYS_MS[1] = 10000. This is the exact bug the
+    // `last.retryAfterMs` fix addresses; without it this assertion fails with 10000.
+    expect(delays).toEqual([2000, 5000]);
+
+    const stored = await latestDecision();
+    expect(stored.decision).toBe("forwarded:ok_after_retry");
   });
 });
