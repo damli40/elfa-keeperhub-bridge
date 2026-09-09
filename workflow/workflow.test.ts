@@ -18,6 +18,11 @@ const workflows: Array<[string, Workflow]> = [
   ["sepolia", sepolia as Workflow],
 ];
 
+const WALLET_ADDRESS = "0xDfcF22C371aE8B03d61ff937acB11DC9FF007d98";
+const WALLET_INTEGRATION_ID = "v0dqh167ypmjqxyds6tuh";
+const WETH_BASE = "0x4200000000000000000000000000000000000006";
+const USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+
 /** Fields whose value decides how much moves, where it goes, or on what chain. */
 const MONEY_FIELDS = [
   "amountIn", "amountOut", "amountOutMinimum", "amountInMaximum", "ethValue",
@@ -44,29 +49,26 @@ function ethToWei(ethStr: string): bigint {
 }
 
 /**
- * Flattens a node's config into path-keyed leaves so a trigger-1 reference
- * buried inside a nested object or array (config.params.recipient,
- * config.args[0], ...) is still found. The "field name" used against
- * MONEY_FIELDS is the leaf's own property name, e.g. "recipient" out of
- * "meta.recipient".
+ * Flattens a node's config into { field, value } leaves so a trigger-1
+ * reference buried inside a nested object or array (config.meta.recipient,
+ * config.args[0], ...) is still found, not just top-level properties.
+ * `field` is the leaf's own property name (e.g. "recipient" whether it sits
+ * at config.recipient or config.meta.recipient) — the check below only
+ * cares what the field is called, not how deep it is nested.
  */
-function flattenConfig(
-  config: Record<string, unknown>,
-  prefix: string[] = []
-): Array<{ field: string; value: unknown }> {
+function flattenConfig(config: Record<string, unknown>): Array<{ field: string; value: unknown }> {
   const out: Array<{ field: string; value: unknown }> = [];
   for (const [key, value] of Object.entries(config)) {
-    const path = [...prefix, key];
     if (Array.isArray(value)) {
-      value.forEach((item, i) => {
+      for (const item of value) {
         if (item !== null && typeof item === "object") {
-          out.push(...flattenConfig(item as Record<string, unknown>, [...path, `[${i}]`]));
+          out.push(...flattenConfig(item as Record<string, unknown>));
         } else {
           out.push({ field: key, value: item });
         }
-      });
+      }
     } else if (value !== null && typeof value === "object") {
-      out.push(...flattenConfig(value as Record<string, unknown>, path));
+      out.push(...flattenConfig(value as Record<string, unknown>));
     } else {
       out.push({ field: key, value });
     }
@@ -149,9 +151,28 @@ describe.each(workflows)("%s workflow", (_name, wf) => {
     expect(cond).not.toContain("===");
   });
 
-  it("pins the balance floor to 0.0025 ETH", () => {
+  it("pins the balance floor to exactly 0.0025 ETH", () => {
     const cond = wf.nodes.find((n) => n.id === "cond-bal")!.data.config.condition as string;
-    expect(cond).toContain("0.0025");
+    const match = cond.match(/>=\s*([\d.]+)/);
+    expect(match).not.toBeNull();
+    expect(match![1]).toBe("0.0025");
+  });
+
+  it("anchors the balance-check address to the approved wallet, exact checksum", () => {
+    const bal = wf.nodes.find((n) => n.id === "bal-1")!.data.config;
+    expect(bal.address).toBe(WALLET_ADDRESS);
+  });
+
+  it("anchors integrationId to the approved wallet integration on every node that signs a transaction", () => {
+    // Only nodes that actually move funds carry the wallet integrationId.
+    // Telegram nodes also have an "integrationId" field, but it names the
+    // Telegram bot integration (still a TELEGRAM_INTEGRATION_ID placeholder
+    // at this point — see the placeholder test above), not the wallet.
+    const SIGNING_ACTION_TYPES = ["uniswap/swap-exact-input", "wrapped/wrap"];
+    for (const node of wf.nodes) {
+      if (!SIGNING_ACTION_TYPES.includes(node.data.config.actionType as string)) continue;
+      expect(node.data.config.integrationId).toBe(WALLET_INTEGRATION_ID);
+    }
   });
 });
 
@@ -171,19 +192,12 @@ describe("base workflow money values", () => {
     expect(node("quote-1").amountIn).toBe("2000000000000000");
   });
 
-  it("quotes exactly the amount it swaps", () => {
-    expect(node("quote-1").amountIn).toBe(node("swap-1").amountIn);
-  });
-
-  it("uses the same slippage floor in the guard and in the swap", () => {
-    const guard = node("cond-quote").condition as string;
-    const floor = guard.match(/>=\s*(\d+)/)![1];
-    expect(node("swap-1").amountOutMinimum).toBe(floor);
-  });
-
-  it("pins the swap floor to the approved minimum-out, 4828900", () => {
+  it("pins the swap floor to exactly the approved minimum-out, 4828900, in both the guard and the swap", () => {
     expect(node("swap-1").amountOutMinimum).toBe("4828900");
-    expect(node("cond-quote").condition).toContain("4828900");
+    const cond = node("cond-quote").condition as string;
+    const match = cond.match(/>=\s*(\d+)/);
+    expect(match).not.toBeNull();
+    expect(match![1]).toBe("4828900");
   });
 
   it("reads the quote through the result wrapper, not the bare field", () => {
@@ -192,10 +206,20 @@ describe("base workflow money values", () => {
 
   it("swaps WETH for USDC on Base at the 0.05 percent tier", () => {
     const swap = node("swap-1");
-    expect(swap.tokenIn).toBe("0x4200000000000000000000000000000000000006");
-    expect(swap.tokenOut).toBe("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913");
+    expect(swap.tokenIn).toBe(WETH_BASE);
+    expect(swap.tokenOut).toBe(USDC_BASE);
     expect(swap.network).toBe("8453");
     expect(swap.fee).toBe("500");
+  });
+
+  it("quotes the same WETH->USDC pair it swaps, in the same order (not swapped)", () => {
+    const quote = node("quote-1");
+    expect(quote.tokenIn).toBe(WETH_BASE);
+    expect(quote.tokenOut).toBe(USDC_BASE);
+  });
+
+  it("sends the swap output to the approved wallet, not an arbitrary recipient", () => {
+    expect(node("swap-1").recipient).toBe(WALLET_ADDRESS);
   });
 
   it("keeps a single run inside the 0.0055 ETH daily cap", () => {
