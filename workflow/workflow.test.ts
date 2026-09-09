@@ -169,8 +169,12 @@ describe.each(workflows)("%s workflow", (_name, wf) => {
     // Telegram bot integration (still a TELEGRAM_INTEGRATION_ID placeholder
     // at this point — see the placeholder test above), not the wallet.
     const SIGNING_ACTION_TYPES = ["uniswap/swap-exact-input", "wrapped/wrap"];
-    for (const node of wf.nodes) {
-      if (!SIGNING_ACTION_TYPES.includes(node.data.config.actionType as string)) continue;
+    const signingNodes = wf.nodes.filter((n) => SIGNING_ACTION_TYPES.includes(n.data.config.actionType as string));
+    // A renamed/removed actionType could make the filter above match nothing,
+    // which would let this test pass on an empty loop without asserting
+    // anything. Require at least one signing node so that can't happen.
+    expect(signingNodes.length).toBeGreaterThan(0);
+    for (const node of signingNodes) {
       expect(node.data.config.integrationId).toBe(WALLET_INTEGRATION_ID);
     }
   });
@@ -195,9 +199,13 @@ describe("base workflow money values", () => {
   it("pins the swap floor to exactly the approved minimum-out, 4828900, in both the guard and the swap", () => {
     expect(node("swap-1").amountOutMinimum).toBe("4828900");
     const cond = node("cond-quote").condition as string;
-    const match = cond.match(/>=\s*(\d+)/);
+    const match = cond.match(/>=\s*([\d.]+)/);
     expect(match).not.toBeNull();
-    expect(match![1]).toBe("4828900");
+    const floor = match![1];
+    // Reject a fractional floor (e.g. "4828900.5") outright rather than
+    // letting a digit-only regex silently match just its integer prefix.
+    expect(floor).not.toContain(".");
+    expect(floor).toBe("4828900");
   });
 
   it("reads the quote through the result wrapper, not the bare field", () => {
@@ -216,6 +224,19 @@ describe("base workflow money values", () => {
     const quote = node("quote-1");
     expect(quote.tokenIn).toBe(WETH_BASE);
     expect(quote.tokenOut).toBe(USDC_BASE);
+  });
+
+  it("quotes the exact same pool the swap trades in: same fee tier, same network", () => {
+    // The 4828900 floor only protects against a bad price if the quote was
+    // read from the pool the swap actually executes against. If quote-1
+    // and swap-1 point at different fee tiers, the guard validates a price
+    // the swap will never get, and slippage protection becomes a no-op
+    // while every other test stays green.
+    const quote = node("quote-1");
+    const swap = node("swap-1");
+    expect(quote.fee).toBe("500");
+    expect(quote.fee).toBe(swap.fee);
+    expect(quote.network).toBe(swap.network);
   });
 
   it("sends the swap output to the approved wallet, not an arbitrary recipient", () => {
