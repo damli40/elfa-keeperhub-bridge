@@ -10,15 +10,19 @@ storyboard carries a row here. A fact with no source does not ship.
 | 3 | The deployed bridge Worker is accepted by Elfa: same endpoint returned `{"valid":true,"errors":[]}` | Live probe against `https://elfa-keeperhub-bridge.meanwhile-waittime.workers.dev/elfa` | 2026-09-09 | ✅ verified |
 | 4 | KeeperHub daily spending cap `effectiveDailyCapWei = 5500000000000000` (0.0055 ETH/day) | `get_spending_limits` probe | 2026-09-07 | ✅ verified |
 | 5 | Uniswap V3 WETH→USDC on Base, fee 500, 0.002 ETH in → `result.amountOut = "4978247"` | `uniswap/quote-exact-input` probe | 2026-09-07 | ⚠️ price-sensitive, re-quote before filming |
-| 6 | "August marked a new all-time high for our API usage, surpassing 3.83M in total requests." | An X post — **URL NOT CAPTURED** | — | 🔴 **UNVERIFIED — DO NOT SHIP** |
+| 6 | "August marked a new all-time high for our API usage, surpassing 3.83M in total requests." | [@elfa_ai on X](https://x.com/elfa_ai/status/2094726966264070642) — official Elfa account | 2026-09-09 | ✅ source cited; wording as relayed, confirm verbatim before publishing |
 
-## Fact 6 — what is missing
+## Fact 6 — how to use it
 
-Dami reported seeing this in an X post. Needed before it can appear anywhere:
-the posting account handle, the post URL, and the post date.
+Source is the integration partner's own official account, which is the strongest kind of
+citation for this claim. Two cautions before it ships:
 
-Why it matters: the main-track category is "Best Integration into a Live Project", so a
-number showing Elfa is live and growing is genuinely load-bearing for the pitch — and
-misquoting the integration partner's own usage figure in a submission they may read is
-the worst place to be wrong. Either cite it exactly or drop it and say "Elfa Auto is a
-live paid product" without a number.
+1. **Confirm the wording verbatim against the post** when writing the README and storyboard.
+   The quote above is as Dami relayed it, not copied from the page. A misquoted usage figure
+   in a submission the Elfa team may read is the worst place to be approximately right.
+2. **Say what it decides, not just the number.** "3.83M API requests in August, an all-time
+   high" is data. The point is: Elfa is a live, growing, paid product with real traders on it
+   — so a bridge that makes its conditions actually execute serves existing users, rather than
+   being a demo built against a toy. That is the main-track category's whole question.
+
+Link the post rather than restating the number bare, so a judge can check it in one click.
