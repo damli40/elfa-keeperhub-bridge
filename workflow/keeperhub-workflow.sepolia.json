@@ -1,0 +1,94 @@
+{
+  "name": "Elfa Auto → wrap ETH (Base Sepolia)",
+  "nodes": [
+    {
+      "id": "trigger-1",
+      "type": "trigger",
+      "data": {
+        "label": "Trigger",
+        "type": "trigger",
+        "config": {
+          "triggerType": "Webhook",
+          "webhookMockRequest": "{\"source\":\"elfa-auto\",\"eventId\":\"mock-1\",\"queryId\":\"mock-query\",\"title\":\"BTC funding flips negative (Binance)\",\"body\":\"annualized_rate crossed below 0\",\"observedValue\":null,\"triggerTime\":null}"
+        }
+      }
+    },
+    {
+      "id": "bal-1",
+      "type": "action",
+      "data": {
+        "label": "Check Balance",
+        "type": "action",
+        "config": {
+          "actionType": "web3/check-balance",
+          "chainId": 84532,
+          "address": "0xDfcF22C371aE8B03d61ff937acB11DC9FF007d98",
+          "failOnError": true
+        }
+      }
+    },
+    {
+      "id": "cond-bal",
+      "type": "action",
+      "data": {
+        "label": "Balance covers amount plus gas reserve",
+        "type": "action",
+        "config": {
+          "actionType": "Condition",
+          "condition": "{{@bal-1:Check Balance.balance}} >= 0.0025"
+        }
+      }
+    },
+    {
+      "id": "wrap-1",
+      "type": "action",
+      "data": {
+        "label": "Wrap",
+        "type": "action",
+        "config": {
+          "actionType": "wrapped/wrap",
+          "network": "84532",
+          "integrationId": "v0dqh167ypmjqxyds6tuh",
+          "ethValue": "0.002"
+        }
+      }
+    },
+    {
+      "id": "tg-ok",
+      "type": "action",
+      "data": {
+        "label": "Notify executed",
+        "type": "action",
+        "config": {
+          "actionType": "telegram/send-message",
+          "integrationId": "TELEGRAM_INTEGRATION_ID",
+          "chatId": "TELEGRAM_CHAT_ID",
+          "parseMode": "none",
+          "message": "Executed {{@trigger-1:Trigger.eventId}} on Base Sepolia: wrapped 0.002 ETH. tx {{@wrap-1:Wrap.transactionHash}}"
+        }
+      }
+    },
+    {
+      "id": "tg-skip-bal",
+      "type": "action",
+      "data": {
+        "label": "Notify skipped (balance)",
+        "type": "action",
+        "config": {
+          "actionType": "telegram/send-message",
+          "integrationId": "TELEGRAM_INTEGRATION_ID",
+          "chatId": "TELEGRAM_CHAT_ID",
+          "parseMode": "none",
+          "message": "Skipped {{@trigger-1:Trigger.eventId}}: wallet holds {{@bal-1:Check Balance.balance}} ETH, below the 0.0025 floor. No transaction sent."
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trigger-1", "target": "bal-1" },
+    { "id": "e2", "source": "bal-1", "target": "cond-bal" },
+    { "id": "e3", "source": "cond-bal", "target": "wrap-1", "sourceHandle": "true" },
+    { "id": "e4", "source": "cond-bal", "target": "tg-skip-bal", "sourceHandle": "false" },
+    { "id": "e5", "source": "wrap-1", "target": "tg-ok" }
+  ]
+}

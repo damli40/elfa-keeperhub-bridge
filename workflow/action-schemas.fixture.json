@@ -1,0 +1,11 @@
+{
+  "_comment": "Committed reference fixture for Task 6. Lists the KeeperHub actionType identifiers this bridge's workflow JSON is allowed to use. workflow.test.ts asserts every actionType referenced by keeperhub-workflow.*.json appears here, so an actionType that doesn't exist on KeeperHub (typo or renamed) fails locally instead of at workflow-creation time in Task 7. Not a copy of KeeperHub's full API schema (that call is out of scope for this task) — just the allow-list this bridge depends on.",
+  "actionTypes": [
+    "web3/check-balance",
+    "Condition",
+    "uniswap/quote-exact-input",
+    "uniswap/swap-exact-input",
+    "wrapped/wrap",
+    "telegram/send-message"
+  ]
+}

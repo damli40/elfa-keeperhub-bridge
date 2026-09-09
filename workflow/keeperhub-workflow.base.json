@@ -1,0 +1,146 @@
+{
+  "name": "Elfa Auto → de-risk ETH to USDC (Base)",
+  "nodes": [
+    {
+      "id": "trigger-1",
+      "type": "trigger",
+      "data": {
+        "label": "Trigger",
+        "type": "trigger",
+        "config": {
+          "triggerType": "Webhook",
+          "webhookMockRequest": "{\"source\":\"elfa-auto\",\"eventId\":\"mock-1\",\"queryId\":\"mock-query\",\"title\":\"BTC funding flips negative (Binance)\",\"body\":\"annualized_rate crossed below 0\",\"observedValue\":null,\"triggerTime\":null}"
+        }
+      }
+    },
+    {
+      "id": "bal-1",
+      "type": "action",
+      "data": {
+        "label": "Check Balance",
+        "type": "action",
+        "config": {
+          "actionType": "web3/check-balance",
+          "chainId": 8453,
+          "address": "0xDfcF22C371aE8B03d61ff937acB11DC9FF007d98",
+          "failOnError": true
+        }
+      }
+    },
+    {
+      "id": "cond-bal",
+      "type": "action",
+      "data": {
+        "label": "Balance covers amount plus gas reserve",
+        "type": "action",
+        "config": {
+          "actionType": "Condition",
+          "condition": "{{@bal-1:Check Balance.balance}} >= 0.0025"
+        }
+      }
+    },
+    {
+      "id": "quote-1",
+      "type": "action",
+      "data": {
+        "label": "Quote",
+        "type": "action",
+        "config": {
+          "actionType": "uniswap/quote-exact-input",
+          "network": "8453",
+          "tokenIn": "0x4200000000000000000000000000000000000006",
+          "tokenOut": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+          "amountIn": "2000000000000000",
+          "fee": "500"
+        }
+      }
+    },
+    {
+      "id": "cond-quote",
+      "type": "action",
+      "data": {
+        "label": "Quote at or above the floor",
+        "type": "action",
+        "config": {
+          "actionType": "Condition",
+          "condition": "{{@quote-1:Quote.result.amountOut}} >= 4828900"
+        }
+      }
+    },
+    {
+      "id": "swap-1",
+      "type": "action",
+      "data": {
+        "label": "Swap",
+        "type": "action",
+        "config": {
+          "actionType": "uniswap/swap-exact-input",
+          "network": "8453",
+          "integrationId": "v0dqh167ypmjqxyds6tuh",
+          "tokenIn": "0x4200000000000000000000000000000000000006",
+          "tokenOut": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+          "fee": "500",
+          "recipient": "0xDfcF22C371aE8B03d61ff937acB11DC9FF007d98",
+          "amountIn": "2000000000000000",
+          "amountOutMinimum": "4828900",
+          "ethValue": "0.002"
+        }
+      }
+    },
+    {
+      "id": "tg-ok",
+      "type": "action",
+      "data": {
+        "label": "Notify executed",
+        "type": "action",
+        "config": {
+          "actionType": "telegram/send-message",
+          "integrationId": "TELEGRAM_INTEGRATION_ID",
+          "chatId": "TELEGRAM_CHAT_ID",
+          "parseMode": "none",
+          "message": "Executed {{@trigger-1:Trigger.eventId}}: {{@trigger-1:Trigger.title}} — swapped 0.002 ETH for USDC. tx {{@swap-1:Swap.transactionHash}}"
+        }
+      }
+    },
+    {
+      "id": "tg-skip-bal",
+      "type": "action",
+      "data": {
+        "label": "Notify skipped (balance)",
+        "type": "action",
+        "config": {
+          "actionType": "telegram/send-message",
+          "integrationId": "TELEGRAM_INTEGRATION_ID",
+          "chatId": "TELEGRAM_CHAT_ID",
+          "parseMode": "none",
+          "message": "Skipped {{@trigger-1:Trigger.eventId}}: wallet holds {{@bal-1:Check Balance.balance}} ETH, below the 0.0025 floor. No transaction sent."
+        }
+      }
+    },
+    {
+      "id": "tg-skip-quote",
+      "type": "action",
+      "data": {
+        "label": "Notify skipped (quote)",
+        "type": "action",
+        "config": {
+          "actionType": "telegram/send-message",
+          "integrationId": "TELEGRAM_INTEGRATION_ID",
+          "chatId": "TELEGRAM_CHAT_ID",
+          "parseMode": "none",
+          "message": "Skipped {{@trigger-1:Trigger.eventId}}: quote {{@quote-1:Quote.result.amountOut}} is below the 4828900 floor. No transaction sent."
+        }
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trigger-1", "target": "bal-1" },
+    { "id": "e2", "source": "bal-1", "target": "cond-bal" },
+    { "id": "e3", "source": "cond-bal", "target": "quote-1", "sourceHandle": "true" },
+    { "id": "e4", "source": "cond-bal", "target": "tg-skip-bal", "sourceHandle": "false" },
+    { "id": "e5", "source": "quote-1", "target": "cond-quote" },
+    { "id": "e6", "source": "cond-quote", "target": "swap-1", "sourceHandle": "true" },
+    { "id": "e7", "source": "cond-quote", "target": "tg-skip-quote", "sourceHandle": "false" },
+    { "id": "e8", "source": "swap-1", "target": "tg-ok" }
+  ]
+}
