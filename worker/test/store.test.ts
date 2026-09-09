@@ -61,11 +61,37 @@ describe("decision records", () => {
     expect(records.map((r) => r.eventId)).toEqual(["new", "old"]);
   });
 
-  it("honours the limit", async () => {
+  it("honours the limit and returns the newest ones in order", async () => {
     for (let i = 0; i < 5; i++) {
       await recordDecision(env.BRIDGE, { at: new Date(1_700_000_000_000 + i * 1000).toISOString(), eventId: `e${i}`, queryId: null, decision: "forwarded:ok" });
     }
-    expect(await recentDecisions(env.BRIDGE, 3)).toHaveLength(3);
+    const records = await recentDecisions(env.BRIDGE, 3);
+    expect(records.map((r) => r.eventId)).toEqual(["e4", "e3", "e2"]);
+  });
+
+  it("stores a record with an unparseable timestamp without pinning it above a genuinely newer record", async () => {
+    // A record dated in the future is the most-recent-by-time record possible; the malformed
+    // record falls back to Date.now() (today), which is older than this future date. If the
+    // NaN bug were still present, the malformed record's key would sort first regardless.
+    await recordDecision(env.BRIDGE, { at: new Date("2099-01-01T00:00:00.000Z").toISOString(), eventId: "future", queryId: null, decision: "forwarded:ok" });
+    await recordDecision(env.BRIDGE, { at: "not-a-date", eventId: "bad-ts", queryId: null, decision: "forwarded:ok" });
+    const records = await recentDecisions(env.BRIDGE);
+    expect(records.map((r) => r.eventId)).toContain("bad-ts");
+    expect(records[0].eventId).toBe("future");
+  });
+
+  it("truncates an oversized detail field to stay under the KV metadata cap", async () => {
+    const huge = "x".repeat(5000);
+    await recordDecision(env.BRIDGE, {
+      at: new Date().toISOString(),
+      eventId: "e-huge",
+      queryId: null,
+      decision: "forwarded:ok",
+      detail: { error: huge },
+    });
+    const [record] = await recentDecisions(env.BRIDGE);
+    expect(record.truncated).toBe(true);
+    expect(new TextEncoder().encode(JSON.stringify(record)).length).toBeLessThan(1024);
   });
 
   it("does not mix raw bodies into the decision listing", async () => {
