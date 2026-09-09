@@ -1,0 +1,12 @@
+name = "elfa-keeperhub-bridge"
+main = "worker/src/index.ts"
+compatibility_date = "2026-08-22"
+
+[vars]
+KEEPERHUB_BASE = "https://app.keeperhub.com"
+BRIDGE_ENABLED = "false"
+ROUTES = "{}"
+
+[[kv_namespaces]]
+binding = "BRIDGE"
+id = "ea7d424e780c4b82843288fa97cb3258"
