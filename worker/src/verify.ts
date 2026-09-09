@@ -24,6 +24,7 @@ function equalsConstantTime(a: string, b: string): boolean {
 }
 
 export async function verifySignature(secret: string, parts: SignedParts): Promise<boolean> {
+  if (typeof secret !== "string" || secret.length === 0) return false;
   if (!parts.signature.startsWith("v1=")) return false;
   const given = parts.signature.slice(3).toLowerCase();
   if (!/^[0-9a-f]{64}$/.test(given)) return false;

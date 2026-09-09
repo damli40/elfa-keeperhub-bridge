@@ -64,6 +64,18 @@ describe("verifySignature", () => {
     const hex = await sign(hashedSecret, parts.timestamp, parts.eventId, parts.rawBody);
     expect(await verifySignature(SECRET, { ...parts, signature: `v1=${hex}` })).toBe(false);
   });
+
+  it("rejects (does not throw) when the secret is an empty string", async () => {
+    const hex = await sign(SECRET, parts.timestamp, parts.eventId, parts.rawBody);
+    expect(await verifySignature("", { ...parts, signature: `v1=${hex}` })).toBe(false);
+  });
+
+  it("rejects (does not throw) when the secret is undefined", async () => {
+    const hex = await sign(SECRET, parts.timestamp, parts.eventId, parts.rawBody);
+    expect(
+      await verifySignature(undefined as unknown as string, { ...parts, signature: `v1=${hex}` }),
+    ).toBe(false);
+  });
 });
 
 describe("isFresh", () => {
@@ -71,6 +83,10 @@ describe("isFresh", () => {
   it("accepts a timestamp inside the window", () => {
     expect(isFresh(String(now - 29), now)).toBe(true);
     expect(isFresh(String(now + 29), now)).toBe(true);
+  });
+  it("accepts a timestamp exactly at the window boundary", () => {
+    expect(isFresh(String(now - 30), now)).toBe(true);
+    expect(isFresh(String(now + 30), now)).toBe(true);
   });
   it("rejects a timestamp outside the window in either direction", () => {
     expect(isFresh(String(now - 31), now)).toBe(false);
