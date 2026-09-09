@@ -55,6 +55,26 @@ export function sanitize(value: unknown, max = 200): string {
   return s;
 }
 
+/**
+ * Test-only observability hook: runs the identical truncate-then-strip-to-fixed-point loop as
+ * `sanitize` and returns how many passes it took, instead of the resulting string. This exists
+ * so a test can assert directly that a given input needs more than N passes — proving the loop's
+ * termination bound is real rather than inferring it indirectly from the output alone (an
+ * indirect assertion can pass against a broken, capped implementation just as easily as a
+ * correct one, which is exactly what happened in round 2). `sanitize` itself is unchanged.
+ */
+export function countStripPasses(value: string, max = 200): number {
+  let s = value.slice(0, max);
+  let passes = 0;
+  for (;;) {
+    const next = s.replaceAll("{{", "").replaceAll("}}", "");
+    if (next === s) break;
+    s = next;
+    passes++;
+  }
+  return passes;
+}
+
 export function extractContext(body: unknown): { observedValue: string | null; triggerTime: string | null } {
   const trigger = (body as { trigger?: unknown })?.trigger as
     | { time?: unknown; matchedConditions?: Array<{ match?: { observedValue?: unknown } }> }

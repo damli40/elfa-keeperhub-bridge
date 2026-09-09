@@ -1,6 +1,22 @@
 import { env } from "cloudflare:test";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { sanitize, extractContext, buildPayload, classify, RETRY_DELAYS_MS, postOnce } from "../src/forward";
+import { sanitize, countStripPasses, extractContext, buildPayload, classify, RETRY_DELAYS_MS, postOnce } from "../src/forward";
+
+// mulberry32: a small, non-overflowing PRNG. A naive `seed * largeConstant` generator (used in
+// round 2) overflows Number.MAX_SAFE_INTEGER on the second iteration, which degenerates the low
+// bit and collapses the generated brace string to a near-constant run that strips in 1 pass —
+// the round-2 tests never actually exercised the many-pass case they claimed to. mulberry32 uses
+// Math.imul (32-bit wrapping multiply) and `>>> 0` to force unsigned 32-bit arithmetic, so it
+// never leaves the safe integer range.
+function mulberry32(seed: number): () => number {
+  return function () {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 describe("sanitize", () => {
   it("strips template braces so external text can never become a KeeperHub template", () => {
@@ -28,24 +44,42 @@ describe("sanitize", () => {
     expect(sanitize("{ {")).toBe("{ {");
   });
 
-  it("handles a genuinely adversarial 500-char random brace string with no artificial iteration cap", () => {
+  it("handles a genuinely adversarial 500-char random brace string (mulberry32 seed 6203), which independently needs 24 passes — more than the old 20-pass cap", () => {
+    const rand = mulberry32(6203);
     let input = "";
-    // deterministic pseudo-random so the test is reproducible
-    let seed = 42;
-    for (let i = 0; i < 500; i++) {
-      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-      input += seed % 2 === 0 ? "{" : "}";
-    }
+    for (let i = 0; i < 500; i++) input += rand() < 0.5 ? "{" : "}";
+    expect(countStripPasses(input, 500)).toBe(24);
     const out = sanitize(input);
     expect(out).not.toContain("{{");
     expect(out).not.toContain("}}");
     expect(out.length).toBeLessThanOrEqual(200);
   });
 
-  it("handles a 300-char adversarial run shaped like {}{}{{{}{{{}{} that needs many passes", () => {
-    const unit = "{}{}{{{}{{{}{}";
-    const input = unit.repeat(Math.ceil(300 / unit.length)).slice(0, 300);
-    const out = sanitize(input);
+  it("handles a hand-constructed 300-char adversarial brace run that needs 75 passes at its own length", () => {
+    // Found by local search (hill-climbing from a mulberry32 seed) for a 300-char {}/{{ mix that
+    // maximizes strip passes, then hard-coded so the test is deterministic. At its own length
+    // (max: 300) this needs 75 passes — the exact class of input round 2's cap silently mishandled.
+    const input =
+      "{}{}{}{}{}{}}}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}}}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{";
+    expect(input).toHaveLength(300);
+    expect(countStripPasses(input, 300)).toBe(75);
+    const out = sanitize(input, 300);
+    expect(out).not.toContain("{{");
+    expect(out).not.toContain("}}");
+    expect(out.length).toBeLessThanOrEqual(300);
+  });
+
+  it("PROOF: a real (default max=200) input needs 51 passes — more than 20 — and sanitize still leaves no {{ or }}", () => {
+    // Found by hill-climbing directly at the production length (200, the default `max`), so this
+    // is not a hypothetical over-length case: it is exactly the shape of input that reaches
+    // sanitize(title) / sanitize(body) in production after truncation. Hard-coded for determinism.
+    const WORST_CASE_200 =
+      "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{";
+    expect(WORST_CASE_200).toHaveLength(200);
+    expect(countStripPasses(WORST_CASE_200)).toBe(51);
+    expect(countStripPasses(WORST_CASE_200)).toBeGreaterThan(20);
+
+    const out = sanitize(WORST_CASE_200);
     expect(out).not.toContain("{{");
     expect(out).not.toContain("}}");
     expect(out.length).toBeLessThanOrEqual(200);
