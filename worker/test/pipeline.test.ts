@@ -61,6 +61,26 @@ async function call(request: Request, e = testEnv()) {
   return res;
 }
 
+/** A KV namespace whose `put` throws for any key starting with `prefix` (empty prefix = every
+ * key) and otherwise delegates to the real binding. Used to force a specific persistence call
+ * (recordDecision / markSeen / storeRaw, distinguished by their key prefixes) to fail without
+ * touching the others. */
+function kvThatFailsPutFor(prefix: string): typeof env.BRIDGE {
+  const real = env.BRIDGE;
+  return new Proxy(real, {
+    get(target, prop) {
+      if (prop === "put") {
+        return async (key: string, ...rest: unknown[]) => {
+          if (key.startsWith(prefix)) throw new Error(`kv put failed for ${key}`);
+          return (target.put as (...a: unknown[]) => unknown)(key, ...rest);
+        };
+      }
+      const value = (target as unknown as Record<string, unknown>)[prop as string];
+      return typeof value === "function" ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+    },
+  });
+}
+
 describe("POST /elfa", () => {
   beforeEach(wipe);
   afterEach(() => vi.restoreAllMocks());
@@ -200,22 +220,73 @@ describe("POST /elfa", () => {
   // the whole design exists to prevent. The failure must instead be counted and surfaced on
   // /health.
   it("returns 200 even when persisting the decision record fails, and counts it on /health", async () => {
-    const real = env.BRIDGE;
-    const brokenKV = new Proxy(real, {
-      get(target, prop) {
-        if (prop === "put") return async () => { throw new Error("kv put failed"); };
-        const value = (target as unknown as Record<string, unknown>)[prop as string];
-        return typeof value === "function" ? (value as (...a: unknown[]) => unknown).bind(target) : value;
-      },
-    });
-
     const before = (await (await call(new Request("https://bridge.test/health"))).json()) as { failedPersists: number };
 
-    const res = await call(await signedRequest({}), testEnv({ BRIDGE_ENABLED: "false", BRIDGE: brokenKV } as never));
+    const res = await call(await signedRequest({}), testEnv({ BRIDGE_ENABLED: "false", BRIDGE: kvThatFailsPutFor("") } as never));
     expect(res.status).toBe(200);
 
     const after = (await (await call(new Request("https://bridge.test/health"))).json()) as { failedPersists: number };
     expect(after.failedPersists).toBeGreaterThan(before.failedPersists);
+  });
+
+  // ROUND 2, ITEM 1 (Ruling 10): markSeen and storeRaw must fail open exactly like
+  // recordDecision — a KV outage on either must not turn a 200 into a 500 (which would make
+  // Elfa retry the whole delivery, the retry-storm the design exists to prevent), and the
+  // forward must still go ahead since KeeperHub's own Idempotency-Key is the real dedupe guard.
+  it("returns 200 and still forwards when markSeen fails to persist", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ executionId: "x9" }), { status: 200 }));
+    const before = (await (await call(new Request("https://bridge.test/health"))).json()) as { failedPersists: number };
+
+    const res = await call(await signedRequest({ eventId: "markseen-fail" }), testEnv({ BRIDGE: kvThatFailsPutFor("seen:") } as never));
+    expect(res.status).toBe(200);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    const after = (await (await call(new Request("https://bridge.test/health"))).json()) as { failedPersists: number };
+    expect(after.failedPersists).toBeGreaterThan(before.failedPersists);
+  });
+
+  it("returns 200 and still forwards when storeRaw fails to persist", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ executionId: "x10" }), { status: 200 }));
+    const before = (await (await call(new Request("https://bridge.test/health"))).json()) as { failedPersists: number };
+
+    const res = await call(await signedRequest({ eventId: "storeraw-fail" }), testEnv({ BRIDGE: kvThatFailsPutFor("raw:") } as never));
+    expect(res.status).toBe(200);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    const after = (await (await call(new Request("https://bridge.test/health"))).json()) as { failedPersists: number };
+    expect(after.failedPersists).toBeGreaterThan(before.failedPersists);
+  });
+
+  // ROUND 2, ITEM 2: queryId must be bounded once, before it ever reaches a Decision base —
+  // including the decision records written directly inside forwardWithRetry's background retry
+  // loop, which never pass through `finish`'s own bounding.
+  it("bounds an oversized routed queryId once, at decisionBase construction — not only via finish", async () => {
+    // A permanent-error forward resolves synchronously inside forwardWithRetry (no
+    // ctx.waitUntil), so this proves decisionBase itself carries the bounded value: every
+    // branch in forwardWithRetry, including the ones the background retry loop writes directly
+    // via safeRecordDecision, spreads this same shared `base` object.
+    const hugeRoutedQueryId = "q".repeat(5000);
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("nope", { status: 403 }));
+    const res = await call(
+      await signedRequest({ eventId: "bound-check", queryId: hugeRoutedQueryId }),
+      testEnv({ ROUTES: JSON.stringify({ [hugeRoutedQueryId]: "wf1" }) } as never),
+    );
+    expect(res.status).toBe(200);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const audit = await (await call(new Request("https://bridge.test/audit"))).json();
+    expect(audit[0]).toMatchObject({ decision: "forwarded:permanent_error" });
+    expect(audit[0].queryId.length).toBeLessThanOrEqual(200);
+  });
+
+  // ROUND 2, ITEM 3: a non-string ROUTES value is dropped silently from routing, but must not be
+  // invisible — a config typo should be diagnosable from /health rather than reading forever as
+  // plain "unrouted" traffic.
+  it("surfaces malformed ROUTES entries on /health instead of dropping them silently", async () => {
+    const health = (await (
+      await call(new Request("https://bridge.test/health"), testEnv({ ROUTES: JSON.stringify({ q1: "wf1", q2: 12345 }) } as never))
+    ).json()) as { routes: number; malformedRoutes: number };
+    expect(health.routes).toBe(1);
+    expect(health.malformedRoutes).toBe(1);
   });
 });
 

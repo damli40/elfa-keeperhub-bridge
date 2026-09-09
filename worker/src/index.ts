@@ -28,6 +28,13 @@ let rejectedUnsigned = 0;
  */
 let failedPersists = 0;
 
+export interface ParsedRoutes {
+  routes: Record<string, string>;
+  /** Own entries in ROUTES whose value was not a string, so a config typo is visible on
+   * /health instead of reading forever as silent "unrouted" traffic with no diagnosis. */
+  malformed: number;
+}
+
 /**
  * Parses ROUTES into a lookup with no prototype chain (`Object.create(null)`) and copies only
  * own, string-valued entries. Two independent guards against the same bug: a queryId of
@@ -35,18 +42,24 @@ let failedPersists = 0;
  * Object.prototype function and be treated as a truthy workflow id — that would pass the
  * unrouted gate, burn a `seen:`/`raw:` KV write, and forward to a garbage URL.
  */
-export function parseRoutes(raw: string): Record<string, string> {
+export function parseRoutesDetailed(raw: string): ParsedRoutes {
   const routes: Record<string, string> = Object.create(null);
+  let malformed = 0;
   try {
     const parsed: unknown = JSON.parse(raw || "{}");
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return routes;
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return { routes, malformed };
     for (const [key, value] of Object.entries(parsed)) {
       if (typeof value === "string") routes[key] = value;
+      else malformed++;
     }
-    return routes;
+    return { routes, malformed };
   } catch {
-    return routes;
+    return { routes, malformed };
   }
+}
+
+export function parseRoutes(raw: string): Record<string, string> {
+  return parseRoutesDetailed(raw).routes;
 }
 
 /** Own-property, type-checked route lookup — belt and braces alongside parseRoutes's null-prototype map. */
@@ -97,6 +110,30 @@ const realSleep = (ms: number): Promise<void> => new Promise((resolve) => setTim
 async function safeRecordDecision(kv: KVNamespace, decision: Decision): Promise<void> {
   try {
     await recordDecision(kv, decision);
+  } catch {
+    failedPersists++;
+  }
+}
+
+/**
+ * Ruling 10: `markSeen` and `storeRaw` must fail open, the same way `recordDecision` does — a KV
+ * outage on either of these three calls must never turn a 200 into a 500, which is exactly the
+ * retry-storm the whole design exists to prevent. Failing open on the dedupe mark specifically is
+ * correct because KeeperHub's own `Idempotency-Key` (built from this same eventId) is the real
+ * duplicate guarantee; the KV `seen:` mark is a fast-path optimisation on top of it, not the only
+ * guard. A lost mark just means this one event skips the fast path and is caught downstream.
+ */
+async function safeMarkSeen(kv: KVNamespace, eventId: string): Promise<void> {
+  try {
+    await markSeen(kv, eventId);
+  } catch {
+    failedPersists++;
+  }
+}
+
+async function safeStoreRaw(kv: KVNamespace, eventId: string, body: string): Promise<void> {
+  try {
+    await storeRaw(kv, eventId, body);
   } catch {
     failedPersists++;
   }
@@ -215,18 +252,25 @@ async function handleElfa(request: Request, env: Env, ctx: ExecutionContext): Pr
   // so a legitimate id containing a stripped sequence would otherwise silently fail to route.
   const queryId = (parsed as { data?: { queryId?: string } })?.data?.queryId ?? null;
   const workflowId = queryId ? resolveWorkflowId(parseRoutes(env.ROUTES), queryId) : undefined;
+
+  // Bound once here so every Decision derived from this point on — whether written through
+  // `finish` or, in the retry loop, written directly by safeRecordDecision without ever passing
+  // through `finish` — inherits the same bounded value. Routing above and buildPayload below
+  // both still use the raw, uncapped `queryId`.
+  const decisionBase: Decision = { ...base, queryId: boundedQueryId(queryId) };
+
   if (!queryId || !workflowId) {
-    return finish({ ...base, queryId, decision: "dropped:unrouted" }, 200);
+    return finish({ ...decisionBase, decision: "dropped:unrouted" }, 200);
   }
 
   if (await seenBefore(env.BRIDGE, headers.eventId)) {
-    return finish({ ...base, queryId, decision: "dropped:duplicate" }, 200);
+    return finish({ ...decisionBase, decision: "dropped:duplicate" }, 200);
   }
-  await markSeen(env.BRIDGE, headers.eventId);
-  await storeRaw(env.BRIDGE, headers.eventId, rawBody);
+  await safeMarkSeen(env.BRIDGE, headers.eventId);
+  await safeStoreRaw(env.BRIDGE, headers.eventId, rawBody);
 
   const payload = buildPayload(headers.eventId, queryId, parsed);
-  const outcome = await forwardWithRetry(env, ctx, workflowId, payload, { ...base, queryId });
+  const outcome = await forwardWithRetry(env, ctx, workflowId, payload, decisionBase);
   return finish(outcome, 200);
 }
 
@@ -247,13 +291,15 @@ export default {
     }
 
     if (url.pathname === "/health" && request.method === "GET") {
+      const { routes, malformed } = parseRoutesDetailed(env.ROUTES);
       return Response.json({
         ok: true,
         enabled: env.BRIDGE_ENABLED === "true",
-        routes: Object.keys(parseRoutes(env.ROUTES)).length,
+        routes: Object.keys(routes).length,
         version: VERSION,
         rejectedUnsigned,
         failedPersists,
+        malformedRoutes: malformed,
       });
     }
 
