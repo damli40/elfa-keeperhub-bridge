@@ -10,6 +10,8 @@ storyboard carries a row here. A fact with no source does not ship.
 | 3 | The deployed bridge Worker is accepted by Elfa: same endpoint returned `{"valid":true,"errors":[]}` | Live probe against `https://elfa-keeperhub-bridge.meanwhile-waittime.workers.dev/elfa` | 2026-09-09 | ✅ verified |
 | 4 | KeeperHub daily spending cap `effectiveDailyCapWei = 5500000000000000` (0.0055 ETH/day) | `get_spending_limits` probe | 2026-09-07 | ✅ verified |
 | 5 | Uniswap V3 WETH→USDC on Base, fee 500, 0.002 ETH in → `result.amountOut = "4978247"` | `uniswap/quote-exact-input` probe | 2026-09-07 | ⚠️ price-sensitive, re-quote before filming |
+| 7 | All six workflow action types exist in KeeperHub's live schema list: `Condition`, `telegram/send-message`, `uniswap/quote-exact-input`, `uniswap/swap-exact-input`, `web3/check-balance`, `wrapped/wrap` | KeeperHub MCP `list_action_schemas`, exact-string match | 2026-09-09 | ✅ verified against the live API |
+| 8 | `wrapped/deposit` is not a real KeeperHub action; the wrapped family is `wrap` / `unwrap` / `balance-of` | same call as fact 7 | 2026-09-09 | ✅ verified — corroborates spec rev 2 |
 | 6 | "August marked a new all-time high for our API usage, surpassing 3.83M in total requests." | [@elfa_ai on X](https://x.com/elfa_ai/status/2094726966264070642) — official Elfa account | 2026-09-09 | ✅ source cited; wording as relayed, confirm verbatim before publishing |
 
 ## Fact 6 — how to use it
