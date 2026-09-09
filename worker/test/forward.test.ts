@@ -27,6 +27,39 @@ describe("sanitize", () => {
   it("leaves lone single braces alone, only removing the doubled delimiter", () => {
     expect(sanitize("{ {")).toBe("{ {");
   });
+
+  it("handles a genuinely adversarial 500-char random brace string with no artificial iteration cap", () => {
+    let input = "";
+    // deterministic pseudo-random so the test is reproducible
+    let seed = 42;
+    for (let i = 0; i < 500; i++) {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      input += seed % 2 === 0 ? "{" : "}";
+    }
+    const out = sanitize(input);
+    expect(out).not.toContain("{{");
+    expect(out).not.toContain("}}");
+    expect(out.length).toBeLessThanOrEqual(200);
+  });
+
+  it("handles a 300-char adversarial run shaped like {}{}{{{}{{{}{} that needs many passes", () => {
+    const unit = "{}{}{{{}{{{}{}";
+    const input = unit.repeat(Math.ceil(300 / unit.length)).slice(0, 300);
+    const out = sanitize(input);
+    expect(out).not.toContain("{{");
+    expect(out).not.toContain("}}");
+    expect(out.length).toBeLessThanOrEqual(200);
+  });
+
+  it("truncates to the length cap first, then strips, so the final result is both within the cap AND delimiter-free at the boundary", () => {
+    // Positioned so a naive strip-then-slice (or a slice that lands mid-delimiter) could leave
+    // "{{" straddling the 200-char cut. Truncate-first must still yield a clean result.
+    const input = "a".repeat(199) + "{{{{{{{{{{".repeat(5); // brace run starts right at the boundary
+    const out = sanitize(input);
+    expect(out.length).toBeLessThanOrEqual(200);
+    expect(out).not.toContain("{{");
+    expect(out).not.toContain("}}");
+  });
 });
 
 describe("extractContext", () => {
@@ -74,7 +107,7 @@ describe("buildPayload", () => {
     expect(Object.keys(buildPayload("42", "q1", {}))).not.toContain("receivedAt");
   });
 
-  it("sanitizes every string-valued field, not just title and body", () => {
+  it("sanitizes every string-valued field except eventId, not just title and body", () => {
     const body = {
       title: "{{tpl}}t",
       body: "{{tpl}}b",
@@ -83,13 +116,18 @@ describe("buildPayload", () => {
         matchedConditions: [{ match: { observedValue: "{{tpl}}-3.21" } }],
       },
     };
-    const payload = buildPayload("ev{{1}}", "q{{1}}", body);
-    expect(payload.eventId).toBe("ev1");
+    const payload = buildPayload("ev1", "q{{1}}", body);
     expect(payload.queryId).toBe("q1");
     expect(payload.title).toBe("tplt");
     expect(payload.body).toBe("tplb");
     expect(payload.observedValue).toBe("tpl-3.21");
     expect(payload.triggerTime).toBe("tpl2026-04-01T12:00:00.000Z");
+  });
+
+  it("passes eventId through raw, unsanitized and untruncated — it must stay byte-identical to the id verify.ts signed and store.ts deduped on (Ruling 9: sanitisation is many-to-one, unsafe for this field)", () => {
+    const rawId = "42{{not-stripped}}" + "x".repeat(250); // would be mangled/truncated by sanitize()
+    const payload = buildPayload(rawId, "q1", { title: "t", body: "b" });
+    expect(payload.eventId).toBe(rawId);
   });
 
   it("keeps observedValue and triggerTime as null, not the string \"null\", when absent", () => {
@@ -139,14 +177,44 @@ describe("postOnce", () => {
     expect(result).toMatchObject({ status: 200, executionId: "x1" });
   });
 
-  it("rejects an eventId containing CR/LF as permanent, without attempting a network call", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
-    const payload = buildPayload("42\r\nX-Injected: yes", "q1", { title: "t", body: "b" });
-    const result = await postOnce({ ...env, KEEPERHUB_BASE: "https://app.keeperhub.com", KEEPERHUB_WEBHOOK_KEY: "wfb_test" }, "wf1", payload);
+  it("passes a valid eventId through unchanged into both the payload and the Idempotency-Key header", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ executionId: "x9" }), { status: 200 }));
+    const rawId = "Elfa_event-99";
+    const payload = buildPayload(rawId, "q1", { title: "t", body: "b" });
+    expect(payload.eventId).toBe(rawId);
 
-    expect(fetchSpy).not.toHaveBeenCalled();
-    expect(classify(result.status)).toBe("permanent");
-    expect(result.retryAfterMs).toBeNull();
+    await postOnce({ ...env, KEEPERHUB_BASE: "https://app.keeperhub.com", KEEPERHUB_WEBHOOK_KEY: "wfb_test" }, "wf1", payload);
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect((init.headers as Record<string, string>)["Idempotency-Key"]).toBe(`elfa-${rawId}`);
+  });
+
+  describe("eventId validation (Ruling 9: allowlist, not sanitisation)", () => {
+    const testEnv = { ...env, KEEPERHUB_BASE: "https://app.keeperhub.com", KEEPERHUB_WEBHOOK_KEY: "wfb_test" };
+
+    const expectRejected = async (eventId: string) => {
+      const fetchSpy = vi.spyOn(globalThis, "fetch");
+      const payload = buildPayload(eventId, "q1", { title: "t", body: "b" });
+      const result = await postOnce(testEnv, "wf1", payload);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(classify(result.status)).toBe("permanent");
+      expect(result.retryAfterMs).toBeNull();
+    };
+
+    it("rejects an eventId containing CR/LF, without attempting a network call", async () => {
+      await expectRejected("42\r\nX-Injected: yes");
+    });
+
+    it("rejects an eventId containing a code point above U+00FF (not a ByteString), without attempting a network call", async () => {
+      await expectRejected("42Ā"); // Ā, above the Latin-1 range ByteString headers require
+    });
+
+    it("rejects an eventId containing {{, without attempting a network call", async () => {
+      await expectRejected("42{{injected}}");
+    });
+
+    it("rejects an eventId longer than 128 characters, without attempting a network call", async () => {
+      await expectRejected("e".repeat(200));
+    });
   });
 
   it("returns a null status instead of throwing when the network fails", async () => {
