@@ -10,3 +10,12 @@ declare module "node:child_process" {
     options: { stdio: "inherit" },
   ): void;
 }
+
+declare module "node:crypto" {
+  interface Hmac {
+    update(data: string): Hmac;
+    digest(encoding: "hex"): string;
+  }
+
+  export function createHmac(algorithm: string, key: string): Hmac;
+}

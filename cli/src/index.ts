@@ -1,5 +1,9 @@
 import { loadLocalEnv } from "./env";
+import { runFire } from "./fire";
+import { runStatus } from "./status";
 import { runSetup } from "./setup";
+import { readConfiguredRoutes } from "./setup";
+import { runTeardown } from "./teardown";
 
 loadLocalEnv();
 
@@ -21,6 +25,24 @@ async function main(): Promise<void> {
       await runSetup({ film: args.includes("--film"), threshold });
       break;
     }
+    case "fire": {
+      const queryId = flagValue("--query-id") ?? Object.keys(readConfiguredRoutes())[0];
+      if (!queryId) throw new Error("No routed query id; run setup or pass --query-id");
+      await runFire({
+        eventId: flagValue("--event-id") ?? String(Date.now()),
+        queryId,
+        stale: args.includes("--stale"),
+        badSignature: args.includes("--bad-sig"),
+        unrouted: args.includes("--unrouted"),
+      });
+      break;
+    }
+    case "status":
+      await runStatus();
+      break;
+    case "teardown":
+      await runTeardown();
+      break;
     default:
       console.error("usage: npm run bridge -- <setup|fire|status|teardown> [flags]");
       process.exitCode = 1;

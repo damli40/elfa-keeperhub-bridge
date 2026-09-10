@@ -65,6 +65,7 @@ export function parseRoutesFromToml(toml: string): Record<string, string> {
 export function updateWranglerVars(
   toml: string,
   routes: Record<string, string>,
+  enabled = true,
 ): string {
   if (
     !/^\s*ROUTES\s*=.*$/m.test(toml) ||
@@ -76,7 +77,10 @@ export function updateWranglerVars(
   const routeLiteral = JSON.stringify(JSON.stringify(routes));
   const next = toml
     .replace(/^\s*ROUTES\s*=.*$/m, `ROUTES = ${routeLiteral}`)
-    .replace(/^\s*BRIDGE_ENABLED\s*=.*$/m, 'BRIDGE_ENABLED = "true"');
+    .replace(
+      /^\s*BRIDGE_ENABLED\s*=.*$/m,
+      `BRIDGE_ENABLED = "${String(enabled)}"`,
+    );
 
   return next;
 }
@@ -94,9 +98,21 @@ export function extractCreatedQueryId(response: unknown): string {
   return id;
 }
 
-function publishRoutes(routes: Record<string, string>): void {
+export function readConfiguredRoutes(
+  configPath = WRANGLER_CONFIG,
+): Record<string, string> {
+  return parseRoutesFromToml(readFileSync(configPath, "utf8"));
+}
+
+export function publishRoutes(
+  routes: Record<string, string>,
+  enabled = true,
+): void {
   const current = readFileSync(WRANGLER_CONFIG, "utf8");
-  writeFileSync(WRANGLER_CONFIG, updateWranglerVars(current, routes));
+  writeFileSync(
+    WRANGLER_CONFIG,
+    updateWranglerVars(current, routes, enabled),
+  );
   execFileSync("npx", ["wrangler", "deploy"], { stdio: "inherit" });
 }
 
@@ -136,9 +152,8 @@ export async function runSetup(options: {
   }
 
   const queryId = extractCreatedQueryId(await elfaCreate(query));
-  const current = readFileSync(WRANGLER_CONFIG, "utf8");
   publishRoutes(
-    mergeRoutes(parseRoutesFromToml(current), queryId, workflowId),
+    mergeRoutes(readConfiguredRoutes(), queryId, workflowId),
   );
 
   console.log(`Elfa plan created: ${queryId}`);

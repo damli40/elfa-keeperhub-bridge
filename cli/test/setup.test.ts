@@ -63,6 +63,13 @@ describe("route configuration", () => {
     const once = updateWranglerVars(toml, { q1: "wf1" });
     expect(updateWranglerVars(once, { q1: "wf1" })).toBe(once);
   });
+
+  it("can clear routes and restore the kill switch", () => {
+    const enabled = updateWranglerVars(toml, { q1: "wf1" });
+    const disabled = updateWranglerVars(enabled, {}, false);
+    expect(disabled).toContain('BRIDGE_ENABLED = "false"');
+    expect(parseRoutesFromToml(disabled)).toEqual({});
+  });
 });
 
 describe("extractCreatedQueryId", () => {
