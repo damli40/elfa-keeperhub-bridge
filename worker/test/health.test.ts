@@ -10,7 +10,7 @@ describe("GET /health", () => {
     await waitOnExecutionContext(ctx);
 
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body).toMatchObject({ ok: true, enabled: false, routes: 0 });
   });
 
