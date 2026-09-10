@@ -41,6 +41,9 @@ This section supersedes the historical status below.
   KeeperHub without another transaction.
 - `README.md` and `video/STORYBOARD.md` are ready. Both clearly distinguish the direct KeeperHub
   mainnet proof from the still-missing live Elfa→Worker path.
+- The KeeperHub credentials and Telegram bot token were shared in chat. They are not tracked by
+  Git, but rotate them before final public launch and update Cloudflare plus the KeeperHub
+  Telegram integration with the replacements.
 - `docs/architecture.html` remains an untracked user-owned file. Do not add or modify it without
   Dami's direction.
 

@@ -115,6 +115,9 @@ instructions.
 
 ## Final submission checklist
 
+- [ ] Credentials shared during development rotated: KeeperHub API key, KeeperHub webhook key,
+  and Telegram bot token; new values installed in `.env`, Cloudflare, and the KeeperHub Telegram
+  integration as applicable
 - [ ] Current Worker deployed; `/health` says `version: 1.0.0`, `enabled: true`, `routes: 1`
 - [ ] `/audit` is public and contains the filmed valid, duplicate, stale, and unrouted decisions
 - [ ] Forged request is absent from `/audit`
