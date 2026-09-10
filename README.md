@@ -158,10 +158,10 @@ transaction and sent the skip notification. The complete evidence is in
   stopped before quoting.
 - KeeperHub's simulator currently reports zero simulated nodes for the protocol-specific Uniswap
   action. The successful Base receipt is the execution proof for that node.
-- Version 1.0.0 was deployed, enabled, and routed. Live harness events proved a successful forward
+- Version 1.0.1 is deployed, enabled, and routed. Live harness events proved a successful forward
   plus duplicate, stale, forged, and unrouted handling. The Elfa film plan did not emit a market
-  trigger, but it did emit a genuine signed expiry notification. That event led to version 1.0.1's
-  lifecycle-event hardening, which still needs an operator deployment.
+  trigger, but it did emit a genuine signed expiry notification. That event led to lifecycle-event
+  hardening, and a second live probe proved the deployed `dropped:lifecycle` gate.
 
 ## Submission context
 

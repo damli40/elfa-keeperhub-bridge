@@ -4,8 +4,8 @@ compatibility_date = "2026-08-22"
 
 [vars]
 KEEPERHUB_BASE = "https://app.keeperhub.com"
-BRIDGE_ENABLED = "false"
-ROUTES = "{}"
+BRIDGE_ENABLED = "true"
+ROUTES = "{\"d3564e99-ac6b-495a-9880-81f020c423d7\":\"9lwespmlwr5ti4xyx817j\"}"
 
 [[kv_namespaces]]
 binding = "BRIDGE"

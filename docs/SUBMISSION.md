@@ -102,6 +102,11 @@ explicitly drops any signed lifecycle status even if a future query is misconfig
 The CLI harness signs the exact Elfa-documented timestamp, event ID, and raw-body contract, but we
 do not present that harness request as an Elfa-emitted market trigger.
 
+Worker version 1.0.1 is now deployed with a standing Elfa funding plan. A live routed expiry probe
+returned `dropped:lifecycle` without calling KeeperHub. A fresh valid event forwarded once, its
+duplicate was dropped, and KeeperHub execution `7c6xsp26ijw29w5laz3cq` stopped at the balance
+guard, sent Telegram, and created no transaction.
+
 The price-floor refusal is covered by invariant and branch tests but was not reached in a second
 mainnet run. After the successful swap, the wallet balance fell below the balance guard, so the
 later live refusal stopped earlier and moved no funds. KeeperHub's simulator also does not simulate
@@ -127,7 +132,7 @@ instructions.
 - [ ] Credentials shared during development rotated: KeeperHub API key, KeeperHub webhook key,
   and Telegram bot token; new values installed in `.env`, Cloudflare, and the KeeperHub Telegram
   integration as applicable
-- [ ] Lifecycle-hardened Worker deployed; `/health` says `version: 1.0.1`, `enabled: true`,
+- [x] Lifecycle-hardened Worker deployed; `/health` says `version: 1.0.1`, `enabled: true`,
   `routes: 1`
 - [x] `/audit` is public and contains valid, duplicate, stale, and unrouted harness decisions
 - [x] Forged request is absent from `/audit`

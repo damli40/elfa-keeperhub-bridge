@@ -93,7 +93,18 @@ That observation exposed a defense-in-depth gap: the query builders had set
 documented query-ID positions and explicitly returns `dropped:lifecycle` for any status other than
 `triggered`, even if an operator later creates a misconfigured query outside the CLI. Mutation
 tests prove that setting `allNotifications` back to true or removing the lifecycle gate fails the
-suite. This fix still needs an operator deployment before another Elfa plan is created.
+suite.
+
+Version `1.0.1` was then deployed with standing funding plan
+`d3564e99-ac6b-495a-9880-81f020c423d7` active and routed. Live lifecycle probe
+`e2e-20260910-lifecycle-v101` used the top-level query ID and status `expired`; the Worker returned
+`200 dropped:lifecycle`, recorded that decision, and made no KeeperHub call.
+
+Fresh valid event `e2e-20260910-v101-valid` returned `200 forwarded:ok`. Its repeat returned
+`200 dropped:duplicate`. KeeperHub created exactly one execution, `7c6xsp26ijw29w5laz3cq`, with
+trace `trigger-1 → bal-1 → cond-bal → tg-skip-bal`. It read
+`0.000925144547693724 ETH`, evaluated the balance condition false, delivered Telegram message 10,
+and produced no transaction hash or gas use.
 
 The signed harness proves the live Worker-to-KeeperHub path using the same HMAC headers and body
 contract, but it is not presented as an Elfa-emitted market trigger.

@@ -1,6 +1,6 @@
 # Demo storyboard
 
-Target length: 2 minutes 30 seconds. The Worker and deterministic refusal evidence are ready.
+Target length: 2 minutes 30 seconds. Worker 1.0.1 and all deterministic refusal evidence are ready.
 Keep the terminal font large, hide `.env`, and never display a token, webhook key, signing secret,
 Telegram chat ID, or full KeeperHub response body.
 
@@ -32,6 +32,8 @@ Telegram chat ID, or full KeeperHub response body.
 - Show the genuine Elfa expiry audit row as a reliability finding, not as a market trigger. Explain
   that it caused the builders to opt out of lifecycle delivery and the Worker to add an explicit
   `dropped:lifecycle` gate.
+- Show the later `e2e-20260910-lifecycle-v101` row to prove that gate is deployed, then the adjacent
+  valid and duplicate version-1.0.1 rows.
 - Close `.env`, shell history, settings pages, and any response panel containing account metadata.
 - Record the final test count immediately before filming. If code changes after this draft, update
   the current count of 166.

@@ -34,9 +34,14 @@ This section supersedes the historical status below.
   This exposed that `allNotifications:true` opted execution webhooks into lifecycle events.
 - The builders now set `allNotifications:false`. The Worker now supports both documented query-ID
   locations and drops every explicit non-`triggered` lifecycle status. Both protections have
-  discriminating mutation evidence. This hardening is not deployed yet; deploys remain Dami's.
+  discriminating mutation evidence. Version 1.0.1 is deployed with standing Elfa funding plan
+  `d3564e99-ac6b-495a-9880-81f020c423d7` active and routed.
+- Live probe `e2e-20260910-lifecycle-v101` returned `dropped:lifecycle`. Fresh valid event
+  `e2e-20260910-v101-valid` forwarded once and its repeat was dropped. KeeperHub execution
+  `7c6xsp26ijw29w5laz3cq` stopped at the balance guard, sent Telegram message 10, and produced no
+  transaction or gas use.
 - `README.md` and `video/STORYBOARD.md` are ready. Both clearly distinguish the direct KeeperHub
-  mainnet proof from the still-missing live Elfa→Worker path.
+  mainnet proof, genuine Elfa lifecycle delivery, and signed-harness execution proof.
 - The KeeperHub credentials and Telegram bot token were shared in chat. They are not tracked by
   Git, but rotate them before final public launch and update Cloudflare plus the KeeperHub
   Telegram integration with the replacements.

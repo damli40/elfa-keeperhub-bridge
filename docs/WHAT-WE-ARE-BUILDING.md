@@ -96,5 +96,6 @@ delivery without making another mainnet swap.
 The Elfa price plan did not emit a market trigger before it expired. Elfa did emit a correctly
 signed expiry webhook, which the Worker accepted and safely refused. That live observation exposed
 the need to opt out of lifecycle delivery and add an explicit lifecycle gate. Both fixes are now
-covered by discriminating tests. The repository does not describe the harness event as if Elfa
-emitted it.
+covered by discriminating tests and deployed in Worker version 1.0.1. A live lifecycle probe was
+dropped before KeeperHub, while a fresh valid event forwarded once and stopped at KeeperHub's
+balance guard. The repository does not describe the harness event as if Elfa emitted it.
