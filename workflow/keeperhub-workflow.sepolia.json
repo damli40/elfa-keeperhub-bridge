@@ -21,7 +21,7 @@
         "type": "action",
         "config": {
           "actionType": "web3/check-balance",
-          "chainId": 84532,
+          "network": "84532",
           "address": "0xDfcF22C371aE8B03d61ff937acB11DC9FF007d98",
           "failOnError": true
         }
@@ -61,8 +61,8 @@
         "type": "action",
         "config": {
           "actionType": "telegram/send-message",
-          "integrationId": "TELEGRAM_INTEGRATION_ID",
-          "chatId": "TELEGRAM_CHAT_ID",
+          "integrationId": "qmaztmvhiogchx3o28xo4",
+          "chatId": "5494676280",
           "parseMode": "none",
           "message": "Executed {{@trigger-1:Trigger.eventId}} on Base Sepolia: wrapped 0.002 ETH. tx {{@wrap-1:Wrap.transactionHash}}"
         }
@@ -76,8 +76,8 @@
         "type": "action",
         "config": {
           "actionType": "telegram/send-message",
-          "integrationId": "TELEGRAM_INTEGRATION_ID",
-          "chatId": "TELEGRAM_CHAT_ID",
+          "integrationId": "qmaztmvhiogchx3o28xo4",
+          "chatId": "5494676280",
           "parseMode": "none",
           "message": "Skipped {{@trigger-1:Trigger.eventId}}: wallet holds {{@bal-1:Check Balance.balance}} ETH, below the 0.0025 floor. No transaction sent."
         }

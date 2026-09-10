@@ -20,21 +20,17 @@ const workflows: Array<[string, Workflow]> = [
 
 const WALLET_ADDRESS = "0xDfcF22C371aE8B03d61ff937acB11DC9FF007d98";
 const WALLET_INTEGRATION_ID = "v0dqh167ypmjqxyds6tuh";
+const TELEGRAM_INTEGRATION_ID = "qmaztmvhiogchx3o28xo4";
+const TELEGRAM_CHAT_ID = "5494676280";
 const WETH_BASE = "0x4200000000000000000000000000000000000006";
 const USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+const BASE_MIN_OUT = "4774984";
 
 /** Fields whose value decides how much moves, where it goes, or on what chain. */
 const MONEY_FIELDS = [
   "amountIn", "amountOut", "amountOutMinimum", "amountInMaximum", "ethValue",
   "address", "recipient", "tokenIn", "tokenOut", "fee", "chainId", "network", "integrationId",
 ];
-
-/**
- * Task 7 fills these in by hand. Until then, any test that needs to recognise
- * "this is the not-yet-real Telegram id" checks against these exact strings.
- */
-const TELEGRAM_INTEGRATION_ID_PLACEHOLDER = "TELEGRAM_INTEGRATION_ID";
-const TELEGRAM_CHAT_ID_PLACEHOLDER = "TELEGRAM_CHAT_ID";
 
 /**
  * Exact, non-lossy ETH-decimal-string -> wei conversion. Used instead of
@@ -137,11 +133,11 @@ describe.each(workflows)("%s workflow", (_name, wf) => {
     }
   });
 
-  it("has not been filled in with a real Telegram id yet", () => {
+  it("pins every Telegram node to the approved integration and chat", () => {
     for (const node of wf.nodes) {
       if (node.data.config.actionType !== "telegram/send-message") continue;
-      expect(node.data.config.integrationId).toBe(TELEGRAM_INTEGRATION_ID_PLACEHOLDER);
-      expect(node.data.config.chatId).toBe(TELEGRAM_CHAT_ID_PLACEHOLDER);
+      expect(node.data.config.integrationId).toBe(TELEGRAM_INTEGRATION_ID);
+      expect(node.data.config.chatId).toBe(TELEGRAM_CHAT_ID);
     }
   });
 
@@ -166,8 +162,7 @@ describe.each(workflows)("%s workflow", (_name, wf) => {
   it("anchors integrationId to the approved wallet integration on every node that signs a transaction", () => {
     // Only nodes that actually move funds carry the wallet integrationId.
     // Telegram nodes also have an "integrationId" field, but it names the
-    // Telegram bot integration (still a TELEGRAM_INTEGRATION_ID placeholder
-    // at this point — see the placeholder test above), not the wallet.
+    // Telegram bot integration pinned above, not the wallet.
     const SIGNING_ACTION_TYPES = ["uniswap/swap-exact-input", "wrapped/wrap"];
     const signingNodes = wf.nodes.filter((n) => SIGNING_ACTION_TYPES.includes(n.data.config.actionType as string));
     // A renamed/removed actionType could make the filter above match nothing,
@@ -196,16 +191,16 @@ describe("base workflow money values", () => {
     expect(node("quote-1").amountIn).toBe("2000000000000000");
   });
 
-  it("pins the swap floor to exactly the approved minimum-out, 4828900, in both the guard and the swap", () => {
-    expect(node("swap-1").amountOutMinimum).toBe("4828900");
+  it("pins the swap floor to exactly the refreshed approved minimum-out in both the guard and the swap", () => {
+    expect(node("swap-1").amountOutMinimum).toBe(BASE_MIN_OUT);
     const cond = node("cond-quote").condition as string;
     const match = cond.match(/>=\s*([\d.]+)/);
     expect(match).not.toBeNull();
     const floor = match![1];
-    // Reject a fractional floor (e.g. "4828900.5") outright rather than
+    // Reject a fractional floor (e.g. "4774984.5") outright rather than
     // letting a digit-only regex silently match just its integer prefix.
     expect(floor).not.toContain(".");
-    expect(floor).toBe("4828900");
+    expect(floor).toBe(BASE_MIN_OUT);
   });
 
   it("reads the quote through the result wrapper, not the bare field", () => {
@@ -227,7 +222,7 @@ describe("base workflow money values", () => {
   });
 
   it("quotes the exact same pool the swap trades in: same fee tier, same network", () => {
-    // The 4828900 floor only protects against a bad price if the quote was
+    // The pinned floor only protects against a bad price if the quote was
     // read from the pool the swap actually executes against. If quote-1
     // and swap-1 point at different fee tiers, the guard validates a price
     // the swap will never get, and slippage protection becomes a no-op
@@ -288,7 +283,7 @@ describe("chain identifiers match their file", () => {
   it("base workflow targets chain 8453 everywhere a chain is named", () => {
     const wf = base as Workflow;
     const bal = wf.nodes.find((n) => n.id === "bal-1")!.data.config;
-    expect(bal.chainId).toBe(8453);
+    expect(bal.network).toBe("8453");
     for (const id of ["quote-1", "swap-1"]) {
       expect(wf.nodes.find((n) => n.id === id)!.data.config.network).toBe("8453");
     }
@@ -297,7 +292,7 @@ describe("chain identifiers match their file", () => {
   it("sepolia workflow targets chain 84532 everywhere a chain is named", () => {
     const wf = sepolia as Workflow;
     const bal = wf.nodes.find((n) => n.id === "bal-1")!.data.config;
-    expect(bal.chainId).toBe(84532);
+    expect(bal.network).toBe("84532");
     expect(wf.nodes.find((n) => n.id === "wrap-1")!.data.config.network).toBe("84532");
   });
 

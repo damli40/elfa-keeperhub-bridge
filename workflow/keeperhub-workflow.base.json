@@ -21,7 +21,7 @@
         "type": "action",
         "config": {
           "actionType": "web3/check-balance",
-          "chainId": 8453,
+          "network": "8453",
           "address": "0xDfcF22C371aE8B03d61ff937acB11DC9FF007d98",
           "failOnError": true
         }
@@ -63,7 +63,7 @@
         "type": "action",
         "config": {
           "actionType": "Condition",
-          "condition": "{{@quote-1:Quote.result.amountOut}} >= 4828900"
+          "condition": "{{@quote-1:Quote.result.amountOut}} >= 4774984"
         }
       }
     },
@@ -82,7 +82,7 @@
           "fee": "500",
           "recipient": "0xDfcF22C371aE8B03d61ff937acB11DC9FF007d98",
           "amountIn": "2000000000000000",
-          "amountOutMinimum": "4828900",
+          "amountOutMinimum": "4774984",
           "ethValue": "0.002"
         }
       }
@@ -95,8 +95,8 @@
         "type": "action",
         "config": {
           "actionType": "telegram/send-message",
-          "integrationId": "TELEGRAM_INTEGRATION_ID",
-          "chatId": "TELEGRAM_CHAT_ID",
+          "integrationId": "qmaztmvhiogchx3o28xo4",
+          "chatId": "5494676280",
           "parseMode": "none",
           "message": "Executed {{@trigger-1:Trigger.eventId}}: {{@trigger-1:Trigger.title}} — swapped 0.002 ETH for USDC. tx {{@swap-1:Swap.transactionHash}}"
         }
@@ -110,8 +110,8 @@
         "type": "action",
         "config": {
           "actionType": "telegram/send-message",
-          "integrationId": "TELEGRAM_INTEGRATION_ID",
-          "chatId": "TELEGRAM_CHAT_ID",
+          "integrationId": "qmaztmvhiogchx3o28xo4",
+          "chatId": "5494676280",
           "parseMode": "none",
           "message": "Skipped {{@trigger-1:Trigger.eventId}}: wallet holds {{@bal-1:Check Balance.balance}} ETH, below the 0.0025 floor. No transaction sent."
         }
@@ -125,10 +125,10 @@
         "type": "action",
         "config": {
           "actionType": "telegram/send-message",
-          "integrationId": "TELEGRAM_INTEGRATION_ID",
-          "chatId": "TELEGRAM_CHAT_ID",
+          "integrationId": "qmaztmvhiogchx3o28xo4",
+          "chatId": "5494676280",
           "parseMode": "none",
-          "message": "Skipped {{@trigger-1:Trigger.eventId}}: quote {{@quote-1:Quote.result.amountOut}} is below the 4828900 floor. No transaction sent."
+          "message": "Skipped {{@trigger-1:Trigger.eventId}}: quote {{@quote-1:Quote.result.amountOut}} is below the 4774984 floor. No transaction sent."
         }
       }
     }
