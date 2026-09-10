@@ -1,5 +1,51 @@
 # Handoff
 
+## Current state, 2026-09-10 03:42 WAT
+
+This section supersedes the historical status below.
+
+- Tasks 1–10 are complete. Task 12's README, storyboard, and adversarial review are complete.
+  Task 11 remains blocked only on the operator deployment and live Elfa→Worker evidence.
+- Branch: `feat/bridge-implementation`. Latest commits:
+  - `bb69316 test: type Worker health response`
+  - `9ef59e6 docs: problem-first README and video storyboard`
+  - `9fc7042 fix: refuse malformed query ids safely`
+  - `246087c feat: fire status and scoped teardown commands`
+- Quality gates: 162/162 tests pass; `npx tsc --noEmit` passes; tracked-secret scan is clean;
+  `npm audit --omit=dev` reports zero production vulnerabilities.
+- Mainnet proof is finished. KeeperHub execution `cgxl31n4l3sns4zy15pqc` swapped 0.002 ETH
+  into 4.922114 USDC on Base in transaction
+  `0x79ab494c3f0f65c63986c1410a503e0167c94f3175492e263b81035e8eac10cd`. Do not spend again
+  without separate explicit authorization.
+- The post-swap wallet balance is 0.000925144547693724 ETH. A later KeeperHub execution,
+  `enykq0mq4ejhy1055wbm4`, proved the balance refusal and produced no transaction.
+- The local Worker is version 1.0.0, but the public URL still serves version 0.1.0 with
+  `enabled=false`, `routes=0`, and no `/audit` route.
+- `npx wrangler whoami` confirms Dami's Cloudflare login and Worker/KV write permissions.
+  `npx wrangler secret list` returns `[]`: the two remote Worker secrets are still absent.
+- Deploys remain Dami's operator action. The exact next sequence is:
+
+  ```bash
+  npx wrangler secret put ELFA_SIGNING_SECRET
+  npx wrangler secret put KEEPERHUB_WEBHOOK_KEY
+  npx wrangler deploy
+  npm run bridge -- setup --film --threshold 78250
+  npm run bridge -- status
+  ```
+
+  The threshold was chosen from a read-only Hyperliquid BTC mid of 78223.5 and is time-sensitive;
+  recheck spot if the command is not run immediately. `setup` creates an Elfa plan, writes its
+  route, enables the bridge, and deploys again.
+- After deployment, use `bridge fire` to record valid, duplicate, stale, forged, and unrouted
+  decisions. Because the wallet sits below the 0.0025 ETH guard, a valid forward will stop in
+  KeeperHub without another transaction.
+- `README.md` and `video/STORYBOARD.md` are ready. Both clearly distinguish the direct KeeperHub
+  mainnet proof from the still-missing live Elfa→Worker path.
+- `docs/architecture.html` remains an untracked user-owned file. Do not add or modify it without
+  Dami's direction.
+
+---
+
 Written 2026-09-10. Read this, then `docs/WHAT-WE-ARE-BUILDING.md` for the plain-language
 explanation, then the plan. Everything below was verified in-session, not recalled.
 
