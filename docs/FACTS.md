@@ -15,25 +15,24 @@ storyboard carries a row here. A fact with no source does not ship.
 | 10 | PR #2322 (issue #2307, payable-value encode transforms) is **MERGED** into KeeperHub staging; issue #2307 closed as completed | GitHub notification, 2026-09-08 18:57 UTC | 2026-09-09 | ✅ verified |
 | 11 | PR #2323 (LayerZero protocol: OFT, token and EndpointV2 reads) is **APPROVED, NOT MERGED** | @joelorzet review, 2026-09-09 22:17 UTC | 2026-09-09 | ⚠️ approved only — **do NOT write "KeeperHub supports LayerZero"** |
 | 8 | `wrapped/deposit` is not a real KeeperHub action; the wrapped family is `wrap` / `unwrap` / `balance-of` | same call as fact 7 | 2026-09-09 | ✅ verified — corroborates spec rev 2 |
-| 6 | "August marked a new all-time high for our API usage, surpassing 3.83M in total requests." | [@elfa_ai on X](https://x.com/elfa_ai/status/2094726966264070642) — official Elfa account | 2026-09-09 | ✅ source cited; wording as relayed, confirm verbatim before publishing |
+| 6 | Elfa surpassed 3.83M total requests in August 2026 after five consecutive months of record usage; Elfa also reported more than 1.8M developer API calls during August. | [@elfa_ai August record](https://x.com/elfa_ai/status/2094726966264070642); [Elfa trade-removal article](https://www.elfa.ai/blog/trade-removal-doubling-down-on-agent-intelligence); [@elfa_ai developer usage](https://x.com/elfa_ai/status/2095503321855352866) | 2026-09-10 | ✅ verified against two first-party posts and Elfa's first-party article |
 | 12 | KeeperHub workflow `9lwespmlwr5ti4xyx817j` swapped 0.002 ETH into 4.922114 USDC on Base mainnet and sent the success Telegram message | KeeperHub execution `cgxl31n4l3sns4zy15pqc`; [BaseScan transaction](https://basescan.org/tx/0x79ab494c3f0f65c63986c1410a503e0167c94f3175492e263b81035e8eac10cd) | 2026-09-10 | ✅ receipt status success; KeeperHub marked the hash verified |
 | 13 | A second workflow run stopped at the balance guard, sent the skip Telegram message, and created no transaction | KeeperHub execution `enykq0mq4ejhy1055wbm4` | 2026-09-10 | ✅ execution trace ended at `tg-skip-bal`; transaction hash list empty |
 | 14 | Worker version 1.0.0 accepted a correctly signed routed harness event, forwarded it to KeeperHub, and dropped a repeat of the same event ID without a second execution | Public Worker `/health` and `/audit`; KeeperHub execution `ux12mjb6qkrnyret2k37w` | 2026-09-10 | ✅ verified live; execution trace ended at the balance-refusal Telegram node with no transaction |
 | 15 | The live Worker rejected a forged signature with 401, rejected a stale signed event with 401, and dropped an unrouted signed event with 200; the forged event created no public audit row | CLI responses and public Worker `/audit` for events `e2e-20260910-forged`, `e2e-20260910-stale`, and `e2e-20260910-unrouted` | 2026-09-10 | ✅ verified live |
 | 16 | Elfa emitted a correctly signed expiry notification for the film plan; the live Worker accepted its signature and created audit event `3e191c8a-3ee6-4a5c-a91c-840d5551ccc1` without reaching KeeperHub | Elfa query `b814b6e5-097e-41b4-a93b-73169661ba53` status plus public Worker `/audit` | 2026-09-10 | ✅ proves genuine Elfa delivery; it was a lifecycle event, not a market trigger |
 | 17 | Deployed Worker 1.0.1 returned `dropped:lifecycle` for a correctly signed, routed expiry probe, then forwarded a fresh valid event exactly once; KeeperHub stopped at the balance guard and sent Telegram without a transaction | Public Worker `/health` and `/audit`; standing Elfa plan `d3564e99-ac6b-495a-9880-81f020c423d7`; KeeperHub execution `7c6xsp26ijw29w5laz3cq` | 2026-09-10 | ✅ lifecycle and duplicate hardening verified live |
+| 18 | Elfa reports 4M+ voices monitored, 600K+ tokens and markets tracked, 80K+ posts processed daily, 310K+ verified accounts, and more than 300 builder and product teams. | [Elfa official website](https://www.elfa.ai/) | 2026-09-10 | ✅ verified against current first-party website |
 
 ## Fact 6 — how to use it
 
 Source is the integration partner's own official account, which is the strongest kind of
 citation for this claim. Two cautions before it ships:
 
-1. **Confirm the wording verbatim against the post** when writing the README and storyboard.
-   The quote above is as Dami relayed it, not copied from the page. A misquoted usage figure
-   in a submission the Elfa team may read is the worst place to be approximately right.
-2. **Say what it decides, not just the number.** "3.83M API requests in August, an all-time
-   high" is data. The point is: Elfa is a live, growing, paid product with real traders on it
-   — so a bridge that makes its conditions actually execute serves existing users, rather than
-   being a demo built against a toy. That is the main-track category's whole question.
+1. **Use the exact category.** Elfa called 3.83M the month's total requests and separately reported
+   more than 1.8M developer API calls. Do not describe all 3.83M as API calls.
+2. **Connect scale to the execution gap.** Elfa is a live product with rising developer usage. It
+   retired trading to focus on intelligence for execution venues and financial agents, so its
+   users need a safe way to connect triggers to an external execution layer.
 
 Link the post rather than restating the number bare, so a judge can check it in one click.

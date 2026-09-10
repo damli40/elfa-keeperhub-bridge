@@ -1,5 +1,20 @@
 # Elfa → KeeperHub Bridge
 
+## 3.83M requests in August. 4M+ voices monitored. 600K+ tokens and markets tracked.
+
+Elfa reported [3.83 million total requests in August 2026](https://x.com/elfa_ai/status/2094726966264070642)
+after [five consecutive record months](https://www.elfa.ai/blog/trade-removal-doubling-down-on-agent-intelligence).
+It also reported [more than 1.8 million developer API calls that month](https://x.com/elfa_ai/status/2095503321855352866).
+Elfa's website lists [4M+ voices and 600K+ tokens and markets](https://www.elfa.ai/). It says more
+than 300 builder and product teams use the platform.
+
+Elfa retired its Trade page to focus on real-time intelligence for exchanges, execution venues,
+and financial agents. That leaves each integrator responsible for turning a high-volume stream of
+market signals into safe execution. Before a trigger can move money, someone must authenticate it,
+drop replays and duplicate deliveries, and prevent the incoming event from choosing the amount,
+asset, chain, or recipient. This bridge gives Elfa triggers that execution boundary through
+KeeperHub.
+
 Elfa Auto can watch markets continuously and emit an event when a condition becomes true. The
 work after that trigger belongs to the operator's runner: Elfa's own documentation assigns the
 runner verification, deduplication, strategy continuation, audit logging, and retries. That is a

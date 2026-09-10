@@ -1,5 +1,19 @@
 # Judge demo guide
 
+## Opening hook
+
+> 3.83 million total requests in August. More than 1.8 million developer API calls. More than four
+> million voices monitored. More than 600,000 tokens and markets tracked.
+
+Sources: [Elfa's August record](https://x.com/elfa_ai/status/2094726966264070642),
+[developer API usage](https://x.com/elfa_ai/status/2095503321855352866), and
+[current product metrics](https://www.elfa.ai/).
+
+Elfa reached five consecutive record months, then retired its Trade page to focus on market
+intelligence for agents and execution venues. Existing users still need to turn those triggers into
+transactions. The bridge supplies the authentication, duplicate protection, fixed execution
+policy, and audit trail needed before an automated signal can move money.
+
 ## One-sentence explanation
 
 Elfa watches the market, the Worker verifies each trigger, and KeeperHub executes a fixed,
@@ -62,7 +76,7 @@ Cloudflare settings, KeeperHub API settings, and Telegram BotFather.
 
 | Time | Show | Say | Criterion |
 | --- | --- | --- | --- |
-| 0:00–0:20 | The diagram above | “Elfa decides when a market condition fires. The Worker audits whether it may reach execution. KeeperHub decides how funds move and audits every workflow step.” | Integration depth and usefulness |
+| 0:00–0:20 | Elfa usage figures, then the diagram | “Elfa handled 3.83 million requests in August after five record months. It retired trading to focus on intelligence. We built the safe execution path its triggers now need.” | Integration depth and usefulness |
 | 0:20–0:40 | Elfa plan and Worker `/health` | “This is a live Elfa plan routed to a deployed Worker. Version 1.0.1 is enabled with one route.” | Real named integration |
 | 0:40–1:10 | KeeperHub workflow canvas | “The webhook carries no amount, token, network, or recipient. KeeperHub fixes those values, checks the wallet balance, takes a Uniswap quote, checks the price floor, and either swaps or sends a refusal.” | Execution depth and safety |
 | 1:10–1:35 | Worker ingress log | “The ingress log shows a valid event forwarded once, its repeat dropped, a stale event refused, an unknown route dropped, and a lifecycle event blocked. The forged request is absent because bad signatures cause no storage write.” | Reliability and observability |

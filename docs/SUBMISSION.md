@@ -26,9 +26,16 @@ workflows on Base, with refusal paths and a public decision audit.
 
 ## Which project did you integrate with, and what does the integration do?
 
-We integrated KeeperHub with Elfa Auto, a live market condition and event-emission service. Elfa
-can monitor funding, price, technical indicators, social signals, and other market conditions, but
-post-trigger execution belongs to an external runner.
+Elfa reported [3.83 million total requests in August](https://x.com/elfa_ai/status/2094726966264070642)
+after [five consecutive record months](https://www.elfa.ai/blog/trade-removal-doubling-down-on-agent-intelligence).
+It also reported [more than 1.8 million developer API calls that month](https://x.com/elfa_ai/status/2095503321855352866).
+Its [live website](https://www.elfa.ai/) lists more than 4 million voices monitored, more than
+600,000 tokens and markets tracked, and more than 300 builder teams.
+
+Elfa retired its Trade page to focus on intelligence for agents and execution venues. We
+integrated KeeperHub with Elfa Auto so existing Elfa users can turn market conditions into reviewed
+on-chain workflows. Elfa can monitor funding, price, technical indicators, social signals, and
+other market conditions, but post-trigger execution belongs to an external runner.
 
 The bridge makes that handoff safe for an on-chain action. A Cloudflare Worker verifies Elfa's
 HMAC over the exact request body, rejects stale and duplicate deliveries, routes only configured
@@ -38,7 +45,7 @@ recipient, balance floor, and price floor are fixed independently of the webhook
 
 The demonstrated workflow checks the wallet balance, takes a live Uniswap V3 quote, swaps a fixed
 0.002 ETH into USDC on Base when both guards pass, and sends the transaction hash to Telegram.
-Every accepted or refused bridge decision appears in a public audit view.
+Every authenticated event produces an accepted or refused decision in the public ingress log.
 
 ## Which KeeperHub surfaces did you use?
 

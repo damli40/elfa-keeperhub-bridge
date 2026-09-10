@@ -8,8 +8,8 @@ Telegram chat ID, or full KeeperHub response body.
 
 | Time | Picture | Narration and proof |
 | --- | --- | --- |
-| 0:00–0:18 | Elfa Agent Runner documentation, with “Auto handles query evaluation and event emission” visible | “Elfa can decide when a market condition is true. Its own runner guide leaves verification, deduplication, continuation, retries, and audit to the downstream operator.” |
-| 0:18–0:32 | Elfa Notifications signature contract | “That boundary matters when the next action moves money. A retry must not trade twice, and a forged or stale request must never reach the wallet.” |
+| 0:00–0:18 | Elfa's August record post and website metrics | “Elfa reported 3.83 million requests in August after five record months. It monitors more than 4 million voices, tracks more than 600,000 tokens and markets, and powers more than 300 builder teams.” |
+| 0:18–0:32 | Elfa's trade-removal article, then the Notifications signature contract | “Elfa retired trading to focus on intelligence for agents and execution venues. Its users now need a safe path from a high-volume trigger to an external wallet.” |
 | 0:32–0:50 | `docs/architecture.html` | “This bridge connects Elfa's signed webhook to KeeperHub's authenticated trigger. Elfa decides when. KeeperHub fixes how.” |
 | 0:50–1:05 | KeeperHub workflow canvas | Point to balance, quote, floor, swap, and Telegram nodes. “No amount, asset, chain, or recipient comes from the webhook. The workflow fixes a 0.002 ETH Base swap and checks two independent safety floors.” |
 | 1:05–1:20 | Terminal: `npm test` | Show all 166 passing tests. Mention that the suite includes money-value invariants and deliberately broken mutations that fail. |
@@ -44,6 +44,8 @@ Every measurable statement spoken on camera must match this table.
 
 | Fact used on camera | Value | Source | Checked |
 | --- | --- | --- | --- |
+| Elfa August demand | `3.83M` total requests; more than `1.8M` developer API calls; five consecutive record months | [Elfa August post](https://x.com/elfa_ai/status/2094726966264070642); [developer-usage post](https://x.com/elfa_ai/status/2095503321855352866); [trade-removal article](https://www.elfa.ai/blog/trade-removal-doubling-down-on-agent-intelligence) | 2026-09-10 |
+| Elfa product scale | `4M+` voices monitored; `600K+` tokens and markets tracked; more than `300` builder and product teams | [Elfa website](https://www.elfa.ai/) | 2026-09-10 |
 | Elfa/runner responsibility | “Auto handles query evaluation and event emission”; the runner handles ingestion, verification and deduplication, continuation, audit, and retries | [Elfa Agent Runner](https://docs.elfa.ai/auto/agent-runner/) | 2026-09-10 |
 | Webhook signature input | `HMAC_SHA256(secret, timestamp + "." + eventId + "." + rawBody)` | [Elfa Notifications](https://docs.elfa.ai/auto/notifications.md) | 2026-09-10 |
 | Fixed swap amount | `0.002 ETH` | KeeperHub workflow `9lwespmlwr5ti4xyx817j`; `workflow/keeperhub-workflow.base.json` | 2026-09-10 |

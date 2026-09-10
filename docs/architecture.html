@@ -81,6 +81,7 @@
     font-size: .87em; background: var(--flow-bg); color: var(--ink);
     padding: 1px 5px; border-radius: 3px;
   }
+  a { color: var(--flow); }
 
   figure { margin: 8px 0 0; }
   .figframe {
@@ -131,13 +132,14 @@
 <div class="wrap">
 
   <header>
-    <p class="eyebrow">Agent Economy &middot; main track</p>
-    <h1>Elfa decides when. KeeperHub decides how.</h1>
-    <p class="standfirst">Elfa Auto watches markets and fires when a condition comes true. It used to place the order too. It doesn&rsquo;t any more, so every user who wants a condition to actually move money has to build the riskiest part themselves.</p>
+    <p class="eyebrow">Elfa scale &middot; August 2026</p>
+    <h1>3.83M requests in August. 4M+ voices monitored.</h1>
+    <p class="standfirst">Elfa also tracks 600K+ tokens and markets and powers more than 300 builder teams. After five consecutive record months, it retired trade execution to focus on intelligence. This bridge gives its market triggers a safe path into KeeperHub.</p>
   </header>
 
   <section>
-    <h2>The problem</h2>
+    <h2>Why the bridge is needed</h2>
+    <p>Elfa&rsquo;s <a href="https://www.elfa.ai/blog/trade-removal-doubling-down-on-agent-intelligence">trade-removal announcement</a> positions the product as the intelligence layer for exchanges, execution venues and financial agents. Elfa reported more than 1.8M developer API calls in August alone.</p>
     <p>Elfa&rsquo;s documentation now tells users to route follow-up execution through their own runner. That runner is exactly the component that fires twice when a webhook is retried, executes on a forged request because nobody checked the signature, or moves the wrong amount because a number arrived in the wrong unit.</p>
     <p>KeeperHub already does execution properly: hosted wallet, spending caps, a log of every step. It even accepts an incoming webhook. But that webhook requires an <code>Authorization: Bearer</code> header, and Elfa&rsquo;s webhook action sends only its own signature headers with no way to add one.</p>
     <p><strong>The two products cannot talk to each other.</strong> That gap is the reason this exists.</p>
@@ -311,6 +313,6 @@
     <p>KeeperHub execution <code>cgxl31n4l3sns4zy15pqc</code> swapped <code>0.002 ETH</code> into <code>4.922114 USDC</code> on Base mainnet. A later run stopped at the balance guard and produced no transaction.</p>
   </section>
 
-  <p class="foot">Evidence: the live Worker ingress log, KeeperHub execution <code>cgxl31n4l3sns4zy15pqc</code>, and the verified Base transaction <code>0x79ab&hellip;10cd</code>.</p>
+  <p class="foot">Scale sources: <a href="https://x.com/elfa_ai/status/2094726966264070642">Elfa&rsquo;s August request record</a>, <a href="https://x.com/elfa_ai/status/2095503321855352866">developer API usage</a>, and <a href="https://www.elfa.ai/">Elfa&rsquo;s live metrics</a>. Execution evidence: KeeperHub run <code>cgxl31n4l3sns4zy15pqc</code> and Base transaction <code>0x79ab&hellip;10cd</code>.</p>
 
 </div>
