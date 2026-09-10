@@ -35,7 +35,7 @@ describe("buildFundingQuery", () => {
       params: {
         url: "https://bridge.example/elfa",
         signingSecret: "s".repeat(64),
-        allNotifications: true,
+        allNotifications: false,
       },
     });
   });
@@ -43,6 +43,10 @@ describe("buildFundingQuery", () => {
   it("carries a title and description", () => {
     expect(query.title.length).toBeGreaterThan(0);
     expect(query.description.length).toBeGreaterThan(0);
+  });
+
+  it("does not send lifecycle notifications to the execution webhook", () => {
+    expect(query.actions[0].params.allNotifications).toBe(false);
   });
 });
 
@@ -71,6 +75,10 @@ describe("buildPriceQuery", () => {
       operator: "crosses_above",
       value: 65_000,
     });
+  });
+
+  it("does not send expiry or run-failed notifications to the execution webhook", () => {
+    expect(query.actions[0].params.allNotifications).toBe(false);
   });
 });
 

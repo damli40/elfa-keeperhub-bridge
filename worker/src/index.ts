@@ -11,7 +11,7 @@ export interface Env {
   ROUTES: string;
 }
 
-export const VERSION = "1.0.0";
+export const VERSION = "1.0.1";
 
 /**
  * Requests rejected before any storage, counted in memory only so junk traffic (unsigned, or
@@ -250,8 +250,14 @@ async function handleElfa(request: Request, env: Env, ctx: ExecutionContext): Pr
 
   // Ruling 1: route on the RAW queryId, never the sanitised copy — sanitising is many-to-one,
   // so a legitimate id containing a stripped sequence would otherwise silently fail to route.
-  const rawQueryId = (parsed as { data?: { queryId?: unknown } })?.data?.queryId;
+  const event = parsed as {
+    status?: unknown;
+    queryId?: unknown;
+    data?: { queryId?: unknown };
+  };
+  const rawQueryId = event?.data?.queryId ?? event?.queryId;
   const queryId = typeof rawQueryId === "string" ? rawQueryId : null;
+  const lifecycleStatus = typeof event?.status === "string" ? event.status : null;
   const workflowId = queryId ? resolveWorkflowId(parseRoutes(env.ROUTES), queryId) : undefined;
 
   // Bound once here so every Decision derived from this point on — whether written through
@@ -259,6 +265,14 @@ async function handleElfa(request: Request, env: Env, ctx: ExecutionContext): Pr
   // through `finish` — inherits the same bounded value. Routing above and buildPayload below
   // both still use the raw, uncapped `queryId`.
   const decisionBase: Decision = { ...base, queryId: boundedQueryId(queryId) };
+
+  // `allNotifications: true` opts webhooks into lifecycle events such as `expired` and
+  // `run-failed`. A lifecycle notification is never an execution instruction. Keep this gate
+  // even though the query builders explicitly set allNotifications=false: it protects the
+  // wallet if an operator creates or edits a query outside this CLI.
+  if (lifecycleStatus !== null && lifecycleStatus !== "triggered") {
+    return finish({ ...decisionBase, decision: "dropped:lifecycle" }, 200);
+  }
 
   if (!queryId || !workflowId) {
     return finish({ ...decisionBase, decision: "dropped:unrouted" }, 200);

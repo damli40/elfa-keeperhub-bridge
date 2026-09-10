@@ -80,7 +80,7 @@ export function buildFundingQuery(
         params: {
           url: webhookUrl,
           signingSecret,
-          allNotifications: true,
+          allNotifications: false,
         },
       },
     ],
@@ -116,7 +116,7 @@ export function buildPriceQuery(
         params: {
           url: webhookUrl,
           signingSecret,
-          allNotifications: true,
+          allNotifications: false,
         },
       },
     ],

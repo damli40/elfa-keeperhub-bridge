@@ -11,7 +11,12 @@ describe("GET /health", () => {
 
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
-    expect(body).toMatchObject({ ok: true, enabled: false, routes: 0 });
+    expect(body).toMatchObject({
+      ok: true,
+      enabled: env.BRIDGE_ENABLED === "true",
+      routes: Object.keys(JSON.parse(env.ROUTES)).length,
+      version: "1.0.1",
+    });
   });
 
   it("404s an unknown path", async () => {

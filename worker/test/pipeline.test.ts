@@ -28,15 +28,18 @@ async function signedRequest(opts: {
   timestampOffset?: number;
   breakSignature?: boolean;
   omitHeader?: boolean;
+  body?: unknown;
 }): Promise<Request> {
   const eventId = opts.eventId ?? "42";
   const timestamp = String(Math.floor(Date.now() / 1000) + (opts.timestampOffset ?? 0));
-  const rawBody = JSON.stringify({
-    id: 12345,
-    title: "BTC funding flips negative (Binance)",
-    body: "annualized_rate crossed below 0",
-    data: { queryId: opts.queryId ?? "q1" },
-  });
+  const rawBody = JSON.stringify(
+    opts.body ?? {
+      id: 12345,
+      title: "BTC funding flips negative (Binance)",
+      body: "annualized_rate crossed below 0",
+      data: { queryId: opts.queryId ?? "q1" },
+    },
+  );
 
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${timestamp}.${eventId}.${rawBody}`));
@@ -157,6 +160,55 @@ describe("POST /elfa", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
     const audit = await readAudit();
     expect(audit[0]).toMatchObject({ decision: "dropped:unrouted" });
+  });
+
+  it("drops a signed lifecycle notification even when its top-level query id is routed", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const res = await call(
+      await signedRequest({
+        eventId: "expired-event",
+        body: {
+          status: "expired",
+          queryId: "q1",
+          title: "Plan Expired",
+          body: "The plan reached its expiry time",
+        },
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("dropped:lifecycle");
+    expect(fetchSpy).not.toHaveBeenCalled();
+    const audit = await readAudit();
+    expect(audit[0]).toMatchObject({
+      queryId: "q1",
+      decision: "dropped:lifecycle",
+    });
+  });
+
+  it("accepts the documented top-level query id on a triggered notification", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ executionId: "x-top-level" }), { status: 200 }),
+    );
+    const res = await call(
+      await signedRequest({
+        eventId: "triggered-event",
+        body: {
+          status: "triggered",
+          queryId: "q1",
+          title: "Plan Triggered",
+          body: "BTC crossed the threshold",
+        },
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    const audit = await readAudit();
+    expect(audit[0]).toMatchObject({
+      queryId: "q1",
+      decision: "forwarded:ok",
+      detail: { executionId: "x-top-level" },
+    });
   });
 
   it("treats a non-string query id as unrouted instead of throwing", async () => {
