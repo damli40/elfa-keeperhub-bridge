@@ -250,7 +250,8 @@ async function handleElfa(request: Request, env: Env, ctx: ExecutionContext): Pr
 
   // Ruling 1: route on the RAW queryId, never the sanitised copy — sanitising is many-to-one,
   // so a legitimate id containing a stripped sequence would otherwise silently fail to route.
-  const queryId = (parsed as { data?: { queryId?: string } })?.data?.queryId ?? null;
+  const rawQueryId = (parsed as { data?: { queryId?: unknown } })?.data?.queryId;
+  const queryId = typeof rawQueryId === "string" ? rawQueryId : null;
   const workflowId = queryId ? resolveWorkflowId(parseRoutes(env.ROUTES), queryId) : undefined;
 
   // Bound once here so every Decision derived from this point on — whether written through

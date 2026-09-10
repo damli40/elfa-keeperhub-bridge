@@ -6,6 +6,17 @@ import type { Decision } from "../src/store";
 
 const SECRET = "a".repeat(64);
 
+interface AuditRow {
+  eventId: string;
+  queryId: string | null;
+  decision: string;
+  detail: Record<string, unknown>;
+}
+
+async function readAudit(): Promise<AuditRow[]> {
+  return (await (await call(new Request("https://bridge.test/audit"))).json()) as AuditRow[];
+}
+
 async function wipe() {
   const list = await env.BRIDGE.list();
   await Promise.all(list.keys.map((k) => env.BRIDGE.delete(k.name)));
@@ -13,7 +24,7 @@ async function wipe() {
 
 async function signedRequest(opts: {
   eventId?: string;
-  queryId?: string;
+  queryId?: unknown;
   timestampOffset?: number;
   breakSignature?: boolean;
   omitHeader?: boolean;
@@ -90,7 +101,7 @@ describe("POST /elfa", () => {
     const res = await call(await signedRequest({}));
     expect(res.status).toBe(200);
 
-    const audit = await (await call(new Request("https://bridge.test/audit"))).json();
+    const audit = await readAudit();
     expect(audit[0]).toMatchObject({ decision: "forwarded:ok", detail: { executionId: "x1" } });
   });
 
@@ -110,14 +121,14 @@ describe("POST /elfa", () => {
     // Stale AND badly signed: the signature verdict must win, proving order.
     const res = await call(await signedRequest({ timestampOffset: -600, breakSignature: true }));
     expect(res.status).toBe(401);
-    const audit = await (await call(new Request("https://bridge.test/audit"))).json();
+    const audit = await readAudit();
     expect(audit).toHaveLength(0);
   });
 
   it("refuses a stale but correctly signed event and records it", async () => {
     const res = await call(await signedRequest({ timestampOffset: -600 }));
     expect(res.status).toBe(401);
-    const audit = await (await call(new Request("https://bridge.test/audit"))).json();
+    const audit = await readAudit();
     expect(audit[0]).toMatchObject({ decision: "refused:stale" });
   });
 
@@ -127,7 +138,7 @@ describe("POST /elfa", () => {
     await call(await signedRequest({ eventId: "dup" }));
     expect(fetchSpy).toHaveBeenCalledTimes(1);
 
-    const audit = await (await call(new Request("https://bridge.test/audit"))).json();
+    const audit = await readAudit();
     expect(audit.map((d: { decision: string }) => d.decision)).toContain("dropped:duplicate");
   });
 
@@ -136,7 +147,7 @@ describe("POST /elfa", () => {
     const res = await call(await signedRequest({}), testEnv({ BRIDGE_ENABLED: "false" } as never));
     expect(res.status).toBe(200);
     expect(fetchSpy).not.toHaveBeenCalled();
-    const audit = await (await call(new Request("https://bridge.test/audit"))).json();
+    const audit = await readAudit();
     expect(audit[0]).toMatchObject({ decision: "dropped:kill_switch" });
   });
 
@@ -144,8 +155,21 @@ describe("POST /elfa", () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     await call(await signedRequest({ queryId: "unknown" }));
     expect(fetchSpy).not.toHaveBeenCalled();
-    const audit = await (await call(new Request("https://bridge.test/audit"))).json();
+    const audit = await readAudit();
     expect(audit[0]).toMatchObject({ decision: "dropped:unrouted" });
+  });
+
+  it("treats a non-string query id as unrouted instead of throwing", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const res = await call(await signedRequest({ queryId: { malformed: true } }));
+    expect(res.status).toBe(200);
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    const audit = await readAudit();
+    expect(audit[0]).toMatchObject({
+      queryId: null,
+      decision: "dropped:unrouted",
+    });
   });
 
   it("records a permanent KeeperHub error with its body and does not retry", async () => {
@@ -153,7 +177,7 @@ describe("POST /elfa", () => {
     const res = await call(await signedRequest({}));
     expect(res.status).toBe(200);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
-    const audit = await (await call(new Request("https://bridge.test/audit"))).json();
+    const audit = await readAudit();
     expect(audit[0]).toMatchObject({ decision: "forwarded:permanent_error" });
     expect(audit[0].detail.body).toContain("invalid integration references");
   });
@@ -195,7 +219,7 @@ describe("POST /elfa", () => {
       const keys = (await env.BRIDGE.list()).keys.map((k) => k.name);
       expect(keys.filter((k) => k.startsWith("seen:") || k.startsWith("raw:"))).toHaveLength(0);
 
-      const audit = await (await call(new Request("https://bridge.test/audit"))).json();
+      const audit = await readAudit();
       expect(audit[0]).toMatchObject({ decision: "dropped:unrouted" });
       fetchSpy.mockRestore();
     }
@@ -209,10 +233,10 @@ describe("POST /elfa", () => {
     const res = await call(await signedRequest({ queryId: hugeQueryId }));
     expect(res.status).toBe(200);
 
-    const audit = await (await call(new Request("https://bridge.test/audit"))).json();
+    const audit = await readAudit();
     expect(audit[0]).toMatchObject({ decision: "dropped:unrouted" });
     expect(typeof audit[0].queryId).toBe("string");
-    expect(audit[0].queryId.length).toBeLessThanOrEqual(200);
+    expect(audit[0].queryId!.length).toBeLessThanOrEqual(200);
   });
 
   // FINDING 3: a KV failure while persisting the decision record must not turn the spec's
@@ -273,9 +297,9 @@ describe("POST /elfa", () => {
     );
     expect(res.status).toBe(200);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
-    const audit = await (await call(new Request("https://bridge.test/audit"))).json();
+    const audit = await readAudit();
     expect(audit[0]).toMatchObject({ decision: "forwarded:permanent_error" });
-    expect(audit[0].queryId.length).toBeLessThanOrEqual(200);
+    expect(audit[0].queryId!.length).toBeLessThanOrEqual(200);
   });
 
   // ROUND 2, ITEM 3: a non-string ROUTES value is dropped silently from routing, but must not be
