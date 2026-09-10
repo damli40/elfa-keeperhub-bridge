@@ -13,8 +13,13 @@ flowchart LR
     B -->|Bearer key + idempotency key| C[KeeperHub<br/>fixed workflow and safety checks]
     C --> D[Uniswap on Base<br/>0.002 ETH to USDC]
     C --> E[Telegram<br/>success or refusal]
-    B --> F[Public audit<br/>authenticated decision history]
+    B --> F[Worker ingress log<br/>authenticated decisions]
+    C --> G[KeeperHub execution audit<br/>guards, receipts, tx hashes]
 ```
+
+The two logs cover different boundaries. The Worker records whether an authenticated Elfa event
+may reach KeeperHub. KeeperHub records what its workflow does after it accepts the trigger. It
+cannot audit an event that the Worker rejects because that event never reaches KeeperHub.
 
 ## What the build does
 
@@ -57,10 +62,10 @@ Cloudflare settings, KeeperHub API settings, and Telegram BotFather.
 
 | Time | Show | Say | Criterion |
 | --- | --- | --- | --- |
-| 0:00–0:20 | The diagram above | “Elfa decides when a market condition fires. KeeperHub decides how funds move. This Worker verifies the handoff and prevents one event from executing twice.” | Integration depth and usefulness |
+| 0:00–0:20 | The diagram above | “Elfa decides when a market condition fires. The Worker audits whether it may reach execution. KeeperHub decides how funds move and audits every workflow step.” | Integration depth and usefulness |
 | 0:20–0:40 | Elfa plan and Worker `/health` | “This is a live Elfa plan routed to a deployed Worker. Version 1.0.1 is enabled with one route.” | Real named integration |
 | 0:40–1:10 | KeeperHub workflow canvas | “The webhook carries no amount, token, network, or recipient. KeeperHub fixes those values, checks the wallet balance, takes a Uniswap quote, checks the price floor, and either swaps or sends a refusal.” | Execution depth and safety |
-| 1:10–1:35 | Worker audit | “The audit shows a valid event forwarded once, its repeat dropped, a stale event refused, an unknown route dropped, and a lifecycle event blocked. The forged request is absent because bad signatures cause no storage write.” | Reliability and observability |
+| 1:10–1:35 | Worker ingress log | “The ingress log shows a valid event forwarded once, its repeat dropped, a stale event refused, an unknown route dropped, and a lifecycle event blocked. The forged request is absent because bad signatures cause no storage write.” | Reliability and observability |
 | 1:35–2:00 | KeeperHub successful execution, then BaseScan | “KeeperHub checked the balance and quote, swapped 0.002 ETH into 4.922114 USDC on Base, sponsored the gas, and sent the transaction hash to Telegram.” | Value moved through KeeperHub |
 | 2:00–2:15 | KeeperHub refusal execution and Telegram | “The current wallet sits below the 0.0025 ETH guard. This later run stopped before the quote and swap, created no transaction, and sent the reason to Telegram.” | Failure handling |
 | 2:15–2:30 | Terminal test result and GitHub repository | “The repository has 166 tests, a clean TypeScript check, workflow value invariants, setup and teardown commands, and a public proof record.” | Developer experience and code quality |

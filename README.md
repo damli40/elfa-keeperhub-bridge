@@ -27,8 +27,11 @@ flowchart LR
     B -->|Bearer key + idempotency key| K[KeeperHub workflow\npolicy + execution]
     K --> U[Uniswap V3 on Base]
     K --> T[Telegram receipt]
-    B --> A[Public decision audit]
+    B --> A[Worker ingress log\nauthenticated decisions]
+    K --> H[KeeperHub execution audit\nguards + receipts + tx hashes]
 ```
+
+The full visual walkthrough is in [`docs/architecture.html`](docs/architecture.html).
 
 Elfa decides **when**. KeeperHub decides **how**. The bridge proves who sent the event, rejects
 replays and duplicates, adds the authentication header KeeperHub needs, and records its decision.
@@ -42,6 +45,20 @@ The KeeperHub workflow then:
 
 The event cannot choose the amount, asset, chain, recipient, protocol, or price floor. Those values
 are fixed in the KeeperHub workflow and pinned by invariant tests.
+
+## Two audit layers
+
+The Worker and KeeperHub record different parts of one run:
+
+- The Worker ingress log records authenticated events that it forwards or rejects, including
+  stale, lifecycle, unrouted, duplicate, and kill-switch outcomes. It rejects missing or invalid
+  HMAC signatures before writing to KV, so those requests leave no public audit row.
+- KeeperHub's execution audit starts after the Worker forwards an accepted event. It records the
+  trigger, balance and quote values, guard branches, swap result, transaction receipt, and Telegram
+  result. KeeperHub cannot record a request that the Worker rejects because it never receives it.
+
+BaseScan supplies independent confirmation for a transaction that KeeperHub executed. In the
+demo, use the Worker log to prove ingress security and KeeperHub's audit to prove execution.
 
 The bridge has no LLM in the execution path, does not trade on Hyperliquid, and is designed for one
 operator. Hyperliquid supplies the short-lived price trigger used for filming; Base is where the

@@ -1,0 +1,316 @@
+<title>Elfa KeeperHub Bridge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<style>
+  :root {
+    --ground:   #F7F8FA;
+    --surface:  #FFFFFF;
+    --ink:      #131820;
+    --muted:    #5C6675;
+    --rule:     #DDE2E9;
+    --flow:     #1F6F8B;
+    --flow-bg:  #E4F0F4;
+    --refuse:   #B26B18;
+    --refuse-bg:#F7EEE0;
+    --stop:     #A4402E;
+    --stop-bg:  #F6E7E3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:   #10141A;
+      --surface:  #171C24;
+      --ink:      #E8ECF2;
+      --muted:    #939DAC;
+      --rule:     #262D38;
+      --flow:     #63B6CE;
+      --flow-bg:  #16303A;
+      --refuse:   #DFA24B;
+      --refuse-bg:#33280F;
+      --stop:     #E08872;
+      --stop-bg:  #33201B;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:   #10141A;
+    --surface:  #171C24;
+    --ink:      #E8ECF2;
+    --muted:    #939DAC;
+    --rule:     #262D38;
+    --flow:     #63B6CE;
+    --flow-bg:  #16303A;
+    --refuse:   #DFA24B;
+    --refuse-bg:#33280F;
+    --stop:     #E08872;
+    --stop-bg:  #33201B;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+    font-size: 16px;
+    line-height: 1.62;
+    margin: 0;
+    padding: 56px 24px 96px;
+  }
+  .wrap { max-width: 74ch; margin: 0 auto; display: flex; flex-direction: column; gap: 34px; }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11.5px; letter-spacing: .11em; text-transform: uppercase;
+    color: var(--muted); margin: 0;
+  }
+  h1 {
+    font-family: Newsreader, Georgia, serif;
+    font-size: clamp(30px, 5vw, 43px); font-weight: 500; line-height: 1.14;
+    margin: 8px 0 0; text-wrap: balance; letter-spacing: -.012em;
+  }
+  .standfirst { font-size: 18.5px; color: var(--muted); margin: 14px 0 0; max-width: 62ch; }
+  h2 {
+    font-family: Newsreader, Georgia, serif;
+    font-size: 26px; font-weight: 500; margin: 0 0 4px; letter-spacing: -.008em;
+  }
+  h3 { font-size: 15px; font-weight: 600; margin: 0 0 6px; }
+  p { margin: 0 0 14px; }
+  p:last-child { margin-bottom: 0; }
+  section { border-top: 1px solid var(--rule); padding-top: 26px; }
+  code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .87em; background: var(--flow-bg); color: var(--ink);
+    padding: 1px 5px; border-radius: 3px;
+  }
+
+  figure { margin: 8px 0 0; }
+  .figframe {
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 6px;
+    padding: 22px 18px; overflow-x: auto;
+  }
+  figure svg { display: block; width: 100%; min-width: 620px; height: auto; }
+  figcaption {
+    font-size: 13.5px; color: var(--muted); margin-top: 12px; max-width: 64ch;
+  }
+
+  .svg-box { fill: var(--surface); stroke: var(--rule); stroke-width: 1.4; }
+  .svg-box-key { fill: var(--flow-bg); stroke: var(--flow); stroke-width: 1.8; }
+  .svg-title { font-family: "IBM Plex Sans", sans-serif; font-size: 14px; font-weight: 600; fill: var(--ink); }
+  .svg-sub { font-family: "IBM Plex Mono", monospace; font-size: 11px; fill: var(--muted); }
+  .svg-edge { font-family: "IBM Plex Mono", monospace; font-size: 11px; fill: var(--muted); }
+  .svg-line { stroke: var(--ink); stroke-width: 1.5; fill: none; }
+  .svg-spine { stroke: var(--flow); stroke-width: 2; fill: none; }
+  .svg-refuse { stroke: var(--refuse); stroke-width: 1.5; fill: none; }
+  .svg-stop { stroke: var(--stop); stroke-width: 1.5; fill: none; }
+  .t-refuse { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; fill: var(--refuse); }
+  .t-stop { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; fill: var(--stop); }
+  .t-flow { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; fill: var(--flow); }
+  .gate { fill: var(--surface); stroke: var(--rule); stroke-width: 1.2; }
+  .gate-label { font-family: "IBM Plex Sans", sans-serif; font-size: 13px; fill: var(--ink); }
+
+  .callout {
+    background: var(--flow-bg); border-left: 3px solid var(--flow);
+    padding: 16px 18px; border-radius: 0 5px 5px 0;
+  }
+  .callout p { margin: 0; }
+  .callout strong { font-weight: 600; }
+
+  .status { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1px;
+            background: var(--rule); border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+  .status div { background: var(--surface); padding: 14px 16px; }
+  .status dt { font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: .08em;
+               text-transform: uppercase; color: var(--muted); margin: 0 0 5px; }
+  .status dd { margin: 0; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .status .sub { font-weight: 400; font-size: 13px; color: var(--muted); }
+
+  ul { margin: 0; padding-left: 20px; }
+  li { margin-bottom: 7px; }
+  li:last-child { margin-bottom: 0; }
+  .foot { font-size: 13px; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 18px; }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Agent Economy &middot; main track</p>
+    <h1>Elfa decides when. KeeperHub decides how.</h1>
+    <p class="standfirst">Elfa Auto watches markets and fires when a condition comes true. It used to place the order too. It doesn&rsquo;t any more, so every user who wants a condition to actually move money has to build the riskiest part themselves.</p>
+  </header>
+
+  <section>
+    <h2>The problem</h2>
+    <p>Elfa&rsquo;s documentation now tells users to route follow-up execution through their own runner. That runner is exactly the component that fires twice when a webhook is retried, executes on a forged request because nobody checked the signature, or moves the wrong amount because a number arrived in the wrong unit.</p>
+    <p>KeeperHub already does execution properly: hosted wallet, spending caps, a log of every step. It even accepts an incoming webhook. But that webhook requires an <code>Authorization: Bearer</code> header, and Elfa&rsquo;s webhook action sends only its own signature headers with no way to add one.</p>
+    <p><strong>The two products cannot talk to each other.</strong> That gap is the reason this exists.</p>
+  </section>
+
+  <section>
+    <h2>The shape</h2>
+    <figure>
+      <div class="figframe">
+        <svg viewBox="0 0 960 360" role="img" aria-label="Elfa Auto sends a signed webhook to the bridge. The bridge verifies it, writes authenticated decisions to its ingress log, and forwards accepted events to KeeperHub. KeeperHub audits its workflow guards, receipts, and transaction hashes while executing the swap on Base.">
+          <defs>
+            <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--ink)"></path>
+            </marker>
+            <marker id="arf" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--flow)"></path>
+            </marker>
+          </defs>
+
+          <rect class="svg-box" x="10" y="62" width="170" height="86" rx="4"></rect>
+          <text class="svg-title" x="95" y="92" text-anchor="middle">Elfa Auto</text>
+          <text class="svg-sub" x="95" y="112" text-anchor="middle">decides WHEN</text>
+          <text class="svg-sub" x="95" y="130" text-anchor="middle">condition engine</text>
+
+          <line class="svg-line" x1="182" y1="105" x2="272" y2="105" marker-end="url(#ar)"></line>
+          <text class="svg-edge" x="227" y="92" text-anchor="middle">signed webhook</text>
+          <text class="t-stop" x="227" y="124" text-anchor="middle">no Bearer possible</text>
+
+          <rect class="svg-box-key" x="280" y="50" width="200" height="110" rx="4"></rect>
+          <text class="svg-title" x="380" y="82" text-anchor="middle">The bridge</text>
+          <text class="svg-sub" x="380" y="102" text-anchor="middle">proves WHO sent it</text>
+          <text class="svg-sub" x="380" y="120" text-anchor="middle">and not-again</text>
+          <text class="t-flow" x="380" y="142" text-anchor="middle">deployed, live</text>
+
+          <line class="svg-line" x1="482" y1="105" x2="572" y2="105" marker-end="url(#ar)"></line>
+          <text class="svg-edge" x="527" y="92" text-anchor="middle">Bearer wfb_</text>
+          <text class="svg-edge" x="527" y="124" text-anchor="middle">Idempotency-Key</text>
+
+          <rect class="svg-box" x="580" y="50" width="200" height="110" rx="4"></rect>
+          <text class="svg-title" x="680" y="82" text-anchor="middle">KeeperHub</text>
+          <text class="svg-sub" x="680" y="102" text-anchor="middle">decides HOW</text>
+          <text class="svg-sub" x="680" y="120" text-anchor="middle">balance, quote, floor</text>
+          <text class="svg-sub" x="680" y="138" text-anchor="middle">wallet + spend caps</text>
+
+          <line class="svg-line" x1="782" y1="105" x2="842" y2="105" marker-end="url(#ar)"></line>
+          <text class="svg-edge" x="812" y="92" text-anchor="middle">swap</text>
+
+          <rect class="svg-box" x="850" y="75" width="100" height="60" rx="4"></rect>
+          <text class="svg-title" x="900" y="100" text-anchor="middle">Base</text>
+          <text class="svg-sub" x="900" y="120" text-anchor="middle">ETH &#8594; USDC</text>
+
+          <line class="svg-spine" x1="380" y1="162" x2="380" y2="258" marker-end="url(#arf)"></line>
+          <text class="svg-edge" x="392" y="200">authenticated</text>
+          <text class="svg-edge" x="392" y="216">decisions</text>
+          <rect class="svg-box-key" x="250" y="262" width="260" height="64" rx="4"></rect>
+          <text class="svg-title" x="380" y="290" text-anchor="middle">Worker ingress log</text>
+          <text class="svg-sub" x="380" y="310" text-anchor="middle">forwarded + rejected events</text>
+
+          <line class="svg-line" x1="680" y1="162" x2="680" y2="258" marker-end="url(#ar)"></line>
+          <text class="svg-edge" x="692" y="200">workflow steps</text>
+          <text class="svg-edge" x="692" y="216">and outcomes</text>
+          <rect class="svg-box" x="550" y="262" width="260" height="64" rx="4"></rect>
+          <text class="svg-title" x="680" y="290" text-anchor="middle">KeeperHub execution audit</text>
+          <text class="svg-sub" x="680" y="310" text-anchor="middle">guards, receipts, tx hash</text>
+        </svg>
+      </div>
+      <figcaption>The bridge converts Elfa&rsquo;s signed webhook into KeeperHub&rsquo;s authenticated trigger. Its public ingress log records authenticated events that it forwards or rejects. KeeperHub&rsquo;s audit starts after forwarding and records the workflow&rsquo;s guards, results, and transaction receipt. KeeperHub cannot record requests the bridge rejects because it never receives them.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>What it refuses</h2>
+    <p>The rubric asks whether a build survives conditions outside the happy path. The bridge applies each gate in order. Authenticated refusals create a log row; malformed and forged requests create none.</p>
+    <figure>
+      <div class="figframe">
+        <svg viewBox="0 0 780 570" role="img" aria-label="A vertical request ladder. Missing headers and bad signatures store nothing. After signature verification, stale, lifecycle, kill-switch, unrouted, and duplicate checks produce logged outcomes. Accepted events reach KeeperHub with retries and an idempotency key.">
+          <defs>
+            <marker id="ra" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--refuse)"></path>
+            </marker>
+            <marker id="sa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--stop)"></path>
+            </marker>
+            <marker id="fa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--flow)"></path>
+            </marker>
+          </defs>
+
+          <text class="svg-sub" x="20" y="30">inbound POST /elfa</text>
+          <line class="svg-spine" x1="40" y1="40" x2="40" y2="522" marker-end="url(#fa)"></line>
+
+          <line class="svg-line" x1="40" y1="79" x2="66" y2="79"></line>
+          <rect class="gate" x="70" y="60" width="320" height="38" rx="3"></rect>
+          <text class="gate-label" x="86" y="84">Three headers present?</text>
+          <line class="svg-stop" x1="392" y1="79" x2="434" y2="79" marker-end="url(#sa)"></line>
+          <text class="t-stop" x="442" y="83">400 &middot; nothing stored</text>
+
+          <line class="svg-line" x1="40" y1="131" x2="66" y2="131"></line>
+          <rect class="gate" x="70" y="112" width="320" height="38" rx="3"></rect>
+          <text class="gate-label" x="86" y="136">HMAC signature valid?</text>
+          <line class="svg-stop" x1="392" y1="131" x2="434" y2="131" marker-end="url(#sa)"></line>
+          <text class="t-stop" x="442" y="135">401 &middot; nothing stored</text>
+
+          <line x1="20" y1="166" x2="700" y2="166" stroke="var(--flow)" stroke-width="1.2" stroke-dasharray="4 4"></line>
+          <text class="t-flow" x="700" y="161" text-anchor="end">storage writes begin here, and not before</text>
+
+          <line class="svg-line" x1="40" y1="199" x2="66" y2="199"></line>
+          <rect class="gate" x="70" y="180" width="320" height="38" rx="3"></rect>
+          <text class="gate-label" x="86" y="204">Timestamp within 30s?</text>
+          <line class="svg-refuse" x1="392" y1="199" x2="434" y2="199" marker-end="url(#ra)"></line>
+          <text class="t-refuse" x="442" y="203">401 refused:stale</text>
+
+          <line class="svg-line" x1="40" y1="251" x2="66" y2="251"></line>
+          <rect class="gate" x="70" y="232" width="320" height="38" rx="3"></rect>
+          <text class="gate-label" x="86" y="256">Status is triggered?</text>
+          <line class="svg-refuse" x1="392" y1="251" x2="434" y2="251" marker-end="url(#ra)"></line>
+          <text class="t-refuse" x="442" y="255">200 dropped:lifecycle</text>
+
+          <line class="svg-line" x1="40" y1="303" x2="66" y2="303"></line>
+          <rect class="gate" x="70" y="284" width="320" height="38" rx="3"></rect>
+          <text class="gate-label" x="86" y="308">Bridge switched on?</text>
+          <line class="svg-refuse" x1="392" y1="303" x2="434" y2="303" marker-end="url(#ra)"></line>
+          <text class="t-refuse" x="442" y="307">200 dropped:kill_switch</text>
+
+          <line class="svg-line" x1="40" y1="355" x2="66" y2="355"></line>
+          <rect class="gate" x="70" y="336" width="320" height="38" rx="3"></rect>
+          <text class="gate-label" x="86" y="360">Plan mapped to a workflow?</text>
+          <line class="svg-refuse" x1="392" y1="355" x2="434" y2="355" marker-end="url(#ra)"></line>
+          <text class="t-refuse" x="442" y="359">200 dropped:unrouted</text>
+
+          <line class="svg-line" x1="40" y1="407" x2="66" y2="407"></line>
+          <rect class="gate" x="70" y="388" width="320" height="38" rx="3"></rect>
+          <text class="gate-label" x="86" y="412">Seen this event before?</text>
+          <line class="svg-refuse" x1="392" y1="407" x2="434" y2="407" marker-end="url(#ra)"></line>
+          <text class="t-refuse" x="442" y="411">200 dropped:duplicate</text>
+
+          <line class="svg-line" x1="40" y1="459" x2="66" y2="459"></line>
+          <rect class="gate" x="70" y="440" width="320" height="38" rx="3"></rect>
+          <text class="gate-label" x="86" y="464">Forward to KeeperHub</text>
+          <line class="svg-refuse" x1="392" y1="459" x2="434" y2="459" marker-end="url(#ra)"></line>
+          <text class="t-refuse" x="442" y="463">retry 2s, 10s, 30s</text>
+
+          <line class="svg-line" x1="40" y1="511" x2="66" y2="511"></line>
+          <rect class="svg-box-key" x="70" y="492" width="320" height="38" rx="3"></rect>
+          <text class="gate-label" x="86" y="516">Record the ingress decision</text>
+          <line class="svg-refuse" x1="392" y1="511" x2="434" y2="511" marker-end="url(#fa)" stroke="var(--flow)"></line>
+          <text class="t-flow" x="442" y="515">200 + a row on /audit</text>
+        </svg>
+      </div>
+      <figcaption>Ochre marks authenticated refusals. Rust marks malformed or forged requests, which write nothing. The Worker delays storage writes until after signature verification so unsigned traffic cannot consume the KV write budget that supports duplicate detection.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>The one idea that matters</h2>
+    <div class="callout">
+      <p><strong>No amount, token, chain or address ever comes from the message.</strong> They live in the KeeperHub workflow, fixed. The message may only say that the condition fired. It cannot influence how much moves, or where it goes.</p>
+    </div>
+    <p style="margin-top:16px">A test scans every field of the workflow definition to prove no money value reads from the incoming payload. That guard is why the adversarial review on 9 September mattered: the tests protecting those values were not pinning them. Halving the swap amount passed 27 of 27. Redirecting the payout to a <code>0xDEADBEEF</code> address passed 36 of 36. Both fail now, each verified by breaking it on purpose and watching the suite go red.</p>
+  </section>
+
+  <section>
+    <h2>Where it stands</h2>
+    <dl class="status">
+      <div><dt>Tests</dt><dd>166 <span class="sub">passing</span></dd></div>
+      <div><dt>Bridge</dt><dd>v1.0.1 <span class="sub">deployed</span></dd></div>
+      <div><dt>Workflow</dt><dd>Fixed <span class="sub">money values</span></dd></div>
+      <div><dt>Chain</dt><dd>Base <span class="sub">mainnet</span></dd></div>
+    </dl>
+    <p style="margin-top:20px">Worker version 1.0.1 is deployed with a live Elfa route. Signed harness events proved forwarding, duplicate suppression, stale and unrouted refusals, and the lifecycle gate. A genuine Elfa expiry event proved signed delivery.</p>
+    <p>KeeperHub execution <code>cgxl31n4l3sns4zy15pqc</code> swapped <code>0.002 ETH</code> into <code>4.922114 USDC</code> on Base mainnet. A later run stopped at the balance guard and produced no transaction.</p>
+  </section>
+
+  <p class="foot">Evidence: the live Worker ingress log, KeeperHub execution <code>cgxl31n4l3sns4zy15pqc</code>, and the verified Base transaction <code>0x79ab&hellip;10cd</code>.</p>
+
+</div>
