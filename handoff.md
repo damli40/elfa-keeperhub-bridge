@@ -5,13 +5,14 @@
 This section supersedes the historical status below.
 
 - Tasks 1–10 are complete. Task 12's README, storyboard, and adversarial review are complete.
-  Task 11 remains blocked only on the operator deployment and live Elfa→Worker evidence.
+  Task 11 has mainnet, live harness, and genuine Elfa lifecycle-delivery evidence. A market-trigger
+  event was not observed before the film plan expired.
 - Branch: `feat/bridge-implementation`. Latest commits:
   - `bb69316 test: type Worker health response`
   - `9ef59e6 docs: problem-first README and video storyboard`
   - `9fc7042 fix: refuse malformed query ids safely`
   - `246087c feat: fire status and scoped teardown commands`
-- Quality gates: 162/162 tests pass; `npx tsc --noEmit` passes; tracked-secret scan is clean;
+- Quality gates: 166/166 tests pass; `npx tsc --noEmit` passes; tracked-secret scan is clean;
   `npm audit --omit=dev` reports zero production vulnerabilities.
 - Mainnet proof is finished. KeeperHub execution `cgxl31n4l3sns4zy15pqc` swapped 0.002 ETH
   into 4.922114 USDC on Base in transaction
@@ -19,26 +20,21 @@ This section supersedes the historical status below.
   without separate explicit authorization.
 - The post-swap wallet balance is 0.000925144547693724 ETH. A later KeeperHub execution,
   `enykq0mq4ejhy1055wbm4`, proved the balance refusal and produced no transaction.
-- The local Worker is version 1.0.0, but the public URL still serves version 0.1.0 with
-  `enabled=false`, `routes=0`, and no `/audit` route.
-- `npx wrangler whoami` confirms Dami's Cloudflare login and Worker/KV write permissions.
-  `npx wrangler secret list` returns `[]`: the two remote Worker secrets are still absent.
-- Deploys remain Dami's operator action. The exact next sequence is:
-
-  ```bash
-  npx wrangler secret put ELFA_SIGNING_SECRET
-  npx wrangler secret put KEEPERHUB_WEBHOOK_KEY
-  npx wrangler deploy
-  npm run bridge -- setup --film --threshold 78250
-  npm run bridge -- status
-  ```
-
-  The threshold was chosen from a read-only Hyperliquid BTC mid of 78223.5 and is time-sensitive;
-  recheck spot if the command is not run immediately. `setup` creates an Elfa plan, writes its
-  route, enables the bridge, and deploys again.
-- After deployment, use `bridge fire` to record valid, duplicate, stale, forged, and unrouted
-  decisions. Because the wallet sits below the 0.0025 ETH guard, a valid forward will stop in
-  KeeperHub without another transaction.
+- The public Worker now serves version 1.0.0 with `enabled=true`, `routes=1`, and `/audit` live.
+  Elfa plan `b814b6e5-097e-41b4-a93b-73169661ba53` is active and routed.
+- The first valid harness event exposed that the KeeperHub workflow was disabled and recorded a
+  410 permanent error. Workflow `9lwespmlwr5ti4xyx817j` was enabled through the documented PATCH
+  contract. Fresh event `e2e-20260910-valid2` then returned `forwarded:ok`; its duplicate was
+  dropped. Forged, stale, and unrouted live refusals also passed.
+- KeeperHub execution `ux12mjb6qkrnyret2k37w` followed
+  `trigger-1 → bal-1 → cond-bal → tg-skip-bal`, read 0.000925144547693724 ETH, sent Telegram
+  message 9, and produced no transaction or gas use.
+- The Elfa price plan expired without a market trigger. It emitted genuine signed expiry event
+  `3e191c8a-3ee6-4a5c-a91c-840d5551ccc1`, which the deployed Worker safely dropped as unrouted.
+  This exposed that `allNotifications:true` opted execution webhooks into lifecycle events.
+- The builders now set `allNotifications:false`. The Worker now supports both documented query-ID
+  locations and drops every explicit non-`triggered` lifecycle status. Both protections have
+  discriminating mutation evidence. This hardening is not deployed yet; deploys remain Dami's.
 - `README.md` and `video/STORYBOARD.md` are ready. Both clearly distinguish the direct KeeperHub
   mainnet proof from the still-missing live Elfa→Worker path.
 - The KeeperHub credentials and Telegram bot token were shared in chat. They are not tracked by

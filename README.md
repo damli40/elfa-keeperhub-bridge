@@ -56,6 +56,7 @@ The Worker applies these gates in order:
 | Missing or invalid HMAC | Reject before any KV write |
 | Timestamp older than 30 seconds | Reject and audit |
 | Kill switch disabled | Drop and audit |
+| Signed lifecycle event such as `expired` or `run-failed` | Drop and audit; never execute |
 | Query ID has no configured route | Drop and audit |
 | Event ID already seen | Drop as duplicate |
 | KeeperHub transient error | Acknowledge Elfa, then retry with the same idempotency key |
@@ -157,9 +158,10 @@ transaction and sent the skip notification. The complete evidence is in
   stopped before quoting.
 - KeeperHub's simulator currently reports zero simulated nodes for the protocol-specific Uniswap
   action. The successful Base receipt is the execution proof for that node.
-- At the time of this README update, the public Worker URL still served an older disabled build.
-  Deploying the current Worker and recording the Elfa→Worker audit rows is the remaining live
-  end-to-end gate.
+- Version 1.0.0 was deployed, enabled, and routed. Live harness events proved a successful forward
+  plus duplicate, stale, forged, and unrouted handling. The Elfa film plan did not emit a market
+  trigger, but it did emit a genuine signed expiry notification. That event led to version 1.0.1's
+  lifecycle-event hardening, which still needs an operator deployment.
 
 ## Submission context
 

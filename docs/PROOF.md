@@ -41,10 +41,68 @@ Wallet balances recorded through Base RPC:
 The second run stopped before the quote and swap because the wallet balance sat below the fixed
 `0.0025 ETH` guard. KeeperHub created no transaction and reported no gas use.
 
+## Live bridge proof
+
+The current Worker was deployed at
+`https://elfa-keeperhub-bridge.meanwhile-waittime.workers.dev` and reported:
+
+- version: `1.0.0`
+- bridge enabled: `true`
+- configured routes: `1`
+- malformed routes: `0`
+
+The short-lived Elfa film plan is active and routed:
+
+- Elfa query: `b814b6e5-097e-41b4-a93b-73169661ba53`
+- condition: BTC price on Hyperliquid crosses above `78250`
+- KeeperHub workflow: `9lwespmlwr5ti4xyx817j`
+
+The deterministic CLI sent requests with Elfa's documented signature headers and exact HMAC
+contract to the live Worker:
+
+| Event | HTTP result | Audit result | KeeperHub effect |
+| --- | --- | --- | --- |
+| `e2e-20260910-valid2` | `200 forwarded:ok` | `forwarded:ok` | Execution `ux12mjb6qkrnyret2k37w` |
+| same event ID again | `200 dropped:duplicate` | `dropped:duplicate` | No second execution |
+| `e2e-20260910-forged` | `401 bad signature` | No row, by design | No execution and no KV write |
+| `e2e-20260910-stale` | `401 refused:stale` | `refused:stale` | No execution |
+| `e2e-20260910-unrouted` | `200 dropped:unrouted` | `dropped:unrouted` | No execution |
+
+Execution `ux12mjb6qkrnyret2k37w` finished successfully in 0.9 seconds. Its trace was
+`trigger-1 → bal-1 → cond-bal → tg-skip-bal`. The balance node returned
+`0.000925144547693724 ETH`, the condition returned false, Telegram returned `success=true` with
+`messageId: 9`, and KeeperHub recorded no transaction hash or gas use.
+
+The first valid harness event, `e2e-20260910-1`, exposed a deployment configuration error:
+KeeperHub returned `410 Workflow is disabled`. The bridge recorded
+`forwarded:permanent_error`, and the repeat was dropped as a duplicate. The workflow was enabled
+through KeeperHub's documented update contract before the fresh `valid2` event was sent. This
+failure and recovery remain visible in `/audit` as operational evidence.
+
+The price plan did not emit a market-triggered webhook. Its first evaluation reported that a price
+preview was unavailable before execution, and it later expired with no condition execution.
+
+At expiry, Elfa emitted a genuine signed lifecycle webhook with event ID
+`3e191c8a-3ee6-4a5c-a91c-840d5551ccc1`. The deployed Worker accepted the signature and safely
+dropped the event as unrouted because this lifecycle payload carried its query ID in the
+top-level canonical position rather than `data.queryId`.
+
+That observation exposed a defense-in-depth gap: the query builders had set
+`allNotifications: true`, opting the execution endpoint into `expired`, `failed`, and
+`run-failed` notifications. The builders now set it to false. The Worker also understands both
+documented query-ID positions and explicitly returns `dropped:lifecycle` for any status other than
+`triggered`, even if an operator later creates a misconfigured query outside the CLI. Mutation
+tests prove that setting `allNotifications` back to true or removing the lifecycle gate fails the
+suite. This fix still needs an operator deployment before another Elfa plan is created.
+
+The signed harness proves the live Worker-to-KeeperHub path using the same HMAC headers and body
+contract, but it is not presented as an Elfa-emitted market trigger.
+
 ## Scope of this proof
 
-These executions prove the KeeperHub workflow, Base transaction, balance refusal, and Telegram
-notification. Task 11 must add evidence for the Elfa-to-Worker path.
+Together, these runs prove the KeeperHub workflow, Base transaction, live Worker deployment,
+genuine Elfa signed delivery, signature contract, routing, duplicate guard, lifecycle guard,
+refusal ladder, balance guard, and Telegram notification.
 
 The live price-floor refusal still needs a funded balance above `0.0025 ETH`. The test suite pins
 the quote condition and swap minimum to the same fixed value and fails if either value changes.

@@ -82,13 +82,19 @@ Most submissions show the happy path. This one is built around everything else.
 ## Status on 2026-09-10
 
 The bridge, workflow, API clients, setup/fire/status/teardown CLI, README, and demo storyboard are
-built. The current suite has 162 passing tests after the final adversarial review.
+built. The current suite has 166 passing tests after the final adversarial review.
 
 The KeeperHub workflow is live. It swapped 0.002 ETH into 4.922114 USDC on Base, sent the success
 Telegram message, and produced a verified transaction receipt. A second run stopped at the wallet
 balance guard, sent the skip message, and produced no transaction.
 
-The remaining gate is deployment of the current Worker. The public URL still serves an older,
-disabled build with no `/audit` route. After the operator deploys version 1.0.0, Task 11 can record
-the signed, duplicate, stale, forged, and unrouted Elfa-to-Worker paths without making another
-mainnet swap.
+The current Worker is deployed as version 1.0.0 with one Elfa query routed to the KeeperHub
+workflow. Live signed-harness runs proved forwarding, duplicate suppression, forged and stale
+signature refusals, unrouted handling, the public audit, KeeperHub's balance guard, and Telegram
+delivery without making another mainnet swap.
+
+The Elfa price plan did not emit a market trigger before it expired. Elfa did emit a correctly
+signed expiry webhook, which the Worker accepted and safely refused. That live observation exposed
+the need to opt out of lifecycle delivery and add an explicit lifecycle gate. Both fixes are now
+covered by discriminating tests. The repository does not describe the harness event as if Elfa
+emitted it.

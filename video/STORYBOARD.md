@@ -1,8 +1,8 @@
 # Demo storyboard
 
-Target length: 2 minutes 30 seconds. Record this only after the current Worker is deployed and the
-Task 11 audit rows exist. Keep the terminal font large, hide `.env`, and never display a token,
-webhook key, signing secret, Telegram chat ID, or full KeeperHub response body.
+Target length: 2 minutes 30 seconds. The Worker and deterministic refusal evidence are ready.
+Keep the terminal font large, hide `.env`, and never display a token, webhook key, signing secret,
+Telegram chat ID, or full KeeperHub response body.
 
 ## Shot list
 
@@ -12,8 +12,8 @@ webhook key, signing secret, Telegram chat ID, or full KeeperHub response body.
 | 0:18–0:32 | Elfa Notifications signature contract | “That boundary matters when the next action moves money. A retry must not trade twice, and a forged or stale request must never reach the wallet.” |
 | 0:32–0:50 | `docs/architecture.html` | “This bridge connects Elfa's signed webhook to KeeperHub's authenticated trigger. Elfa decides when. KeeperHub fixes how.” |
 | 0:50–1:05 | KeeperHub workflow canvas | Point to balance, quote, floor, swap, and Telegram nodes. “No amount, asset, chain, or recipient comes from the webhook. The workflow fixes a 0.002 ETH Base swap and checks two independent safety floors.” |
-| 1:05–1:20 | Terminal: `npm test` | Show all 162 passing tests. Mention that the suite includes money-value invariants and deliberately broken mutations that fail. |
-| 1:20–1:39 | Terminal: one valid `bridge fire`, then the HTML `/audit` page | “The Worker verifies the exact body bytes, freshness, route, and duplicate state. It forwards once with an idempotency key and records the decision.” Use a newly chosen event ID. The low wallet balance should select KeeperHub's no-funds branch and spend nothing. |
+| 1:05–1:20 | Terminal: `npm test` | Show all 166 passing tests. Mention that the suite includes money-value invariants and deliberately broken mutations that fail. |
+| 1:20–1:39 | Terminal: one valid `bridge fire`, then the HTML `/audit` page | “The Worker verifies the exact body bytes, freshness, route, and duplicate state. It forwards once with an idempotency key and records the decision.” Use a newly chosen event ID. The low wallet balance selects KeeperHub's no-funds branch and spends nothing. Do not call the harness event an Elfa-emitted event. |
 | 1:39–1:55 | Repeat the same event ID; then fire stale, forged, and unrouted inputs | Show `dropped:duplicate`, `refused:stale`, and `dropped:unrouted`. Explain that the forged request does not appear in the audit because invalid signatures cause zero KV writes. |
 | 1:55–2:15 | KeeperHub successful execution trace, then BaseScan transaction | “The funded proof run checked the balance, took a live Uniswap quote, swapped 0.002 ETH into 4.922114 USDC on Base, and sent the receipt to Telegram. KeeperHub sponsored the gas.” Keep the transaction hash visible. |
 | 2:15–2:27 | KeeperHub balance-refusal trace and Telegram skip message | “A second run found only 0.000925 ETH, stopped before the quote and swap, produced no transaction, and still told the operator why.” |
@@ -21,7 +21,7 @@ webhook key, signing secret, Telegram chat ID, or full KeeperHub response body.
 
 ## Recording checklist
 
-- Deploy the current Worker and confirm `/health` reports version `1.0.0`.
+- Deploy the current Worker and confirm `/health` reports version `1.0.1`.
 - Confirm `/audit` loads before recording.
 - Use the short-lived film plan, not the standing funding plan.
 - Keep the Base workflow selected. Its low balance now guarantees a no-spend live bridge demo.
@@ -29,9 +29,12 @@ webhook key, signing secret, Telegram chat ID, or full KeeperHub response body.
 - Confirm the duplicate attempt creates no second KeeperHub execution.
 - Open the successful execution and BaseScan transaction in advance.
 - Open the balance-refusal execution and Telegram conversation in advance.
+- Show the genuine Elfa expiry audit row as a reliability finding, not as a market trigger. Explain
+  that it caused the builders to opt out of lifecycle delivery and the Worker to add an explicit
+  `dropped:lifecycle` gate.
 - Close `.env`, shell history, settings pages, and any response panel containing account metadata.
 - Record the final test count immediately before filming. If code changes after this draft, update
-  the current count of 162.
+  the current count of 166.
 
 ## Fact provenance
 

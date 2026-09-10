@@ -72,6 +72,7 @@ Reliability is the core of the integration, not an extra screen added to a happy
 
 - Invalid HMAC: rejected before any storage write
 - Request older than 30 seconds: rejected and audited
+- Signed expiry or failure notification: dropped and audited, never executed
 - Unknown query ID: dropped and audited
 - Duplicate event ID: dropped before a second KeeperHub call
 - Cloudflare KV race: KeeperHub receives the same idempotency key as the final duplicate guard
@@ -80,18 +81,26 @@ Reliability is the core of the integration, not an extra screen added to a happy
 - Low wallet balance or bad quote: workflow branches to Telegram without reaching the swap
 - Public `/audit`: shows recent decisions without raw webhook bodies or secrets
 
-The repository has 162 tests. The workflow tests pin the exact money amount, token addresses,
+The repository has 166 tests. The workflow tests pin the exact money amount, token addresses,
 wallet address, chain, fee tier, price floor, and Telegram integration. We deliberately mutated
 those values during review and confirmed that the tests fail.
 
 ## What still breaks or is unfinished?
 
-Replace this answer after the final deployment and filmed run.
+The mainnet KeeperHub execution and balance-refusal proofs are complete. Cloudflare Worker version
+1.0.0 is deployed, enabled, and routed. Live signed-harness requests proved the successful
+Worker-to-KeeperHub path, duplicate suppression, forged and stale refusals, unrouted handling, and
+the public audit. The resulting KeeperHub run stopped at the low-balance guard and sent Telegram
+without producing a transaction.
 
-The mainnet KeeperHub execution and balance-refusal proofs are complete. The current Cloudflare
-Worker code is also complete and tested, but its public URL still serves an older disabled build.
-The remaining task is to deploy version 1.0.0, create the short-lived Elfa film plan, and record the
-valid, duplicate, stale, forged, and unrouted audit rows.
+The short-lived Elfa price plan did not emit a market-triggered webhook before it expired. Elfa did
+send its correctly signed expiry notification to the live Worker, proving genuine Elfa delivery.
+That lifecycle event exposed an integration flaw: `allNotifications: true` subscribed the
+execution endpoint to expiry and failure notifications. The builders now opt out, and the Worker
+explicitly drops any signed lifecycle status even if a future query is misconfigured.
+
+The CLI harness signs the exact Elfa-documented timestamp, event ID, and raw-body contract, but we
+do not present that harness request as an Elfa-emitted market trigger.
 
 The price-floor refusal is covered by invariant and branch tests but was not reached in a second
 mainnet run. After the successful swap, the wallet balance fell below the balance guard, so the
@@ -118,11 +127,12 @@ instructions.
 - [ ] Credentials shared during development rotated: KeeperHub API key, KeeperHub webhook key,
   and Telegram bot token; new values installed in `.env`, Cloudflare, and the KeeperHub Telegram
   integration as applicable
-- [ ] Current Worker deployed; `/health` says `version: 1.0.0`, `enabled: true`, `routes: 1`
-- [ ] `/audit` is public and contains the filmed valid, duplicate, stale, and unrouted decisions
-- [ ] Forged request is absent from `/audit`
-- [ ] README's temporary stale-deployment limit removed
-- [ ] `docs/PROOF.md` includes the live Elfa plan ID and Worker audit event IDs
+- [ ] Lifecycle-hardened Worker deployed; `/health` says `version: 1.0.1`, `enabled: true`,
+  `routes: 1`
+- [x] `/audit` is public and contains valid, duplicate, stale, and unrouted harness decisions
+- [x] Forged request is absent from `/audit`
+- [x] README's stale-deployment statement resolved
+- [x] `docs/PROOF.md` includes the live Elfa plan ID and Worker audit event IDs
 - [ ] Video follows `video/STORYBOARD.md` and shows no secret-bearing surfaces
 - [ ] Public repository URL opens while logged out
 - [ ] Video URL opens while logged out
