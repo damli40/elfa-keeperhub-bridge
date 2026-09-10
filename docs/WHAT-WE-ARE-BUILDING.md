@@ -10,9 +10,9 @@ watches continuously, firing when the condition becomes true. Something like: Bi
 Binance flips negative, meaning shorts start paying longs, which usually says the market has
 leaned too far one way.
 
-Elfa used to place the order for you as well. They removed that. Their documentation now tells
-users to route follow-up execution through their own runner, off a webhook, notify or
-telegram_bot action.
+Elfa's current documentation makes Auto the condition and event-emission control plane. It tells
+operators to continue post-trigger work in an Agent Runner, which must handle event ingestion,
+verification and deduplication, downstream delivery, audit logging, and retries.
 
 So every Elfa user who wants a condition to actually do something on-chain has to build and host
 the most dangerous component themselves. That runner is exactly the piece that fires twice when a
@@ -81,20 +81,14 @@ Most submissions show the happy path. This one is built around everything else.
 
 ## Status on 2026-09-10
 
-Built and reviewed, 132 tests passing: the deployed Worker, signature verification, KV storage,
-payload building and forwarding with retries, the request pipeline and public audit page, and both
-workflow definitions with 41 invariant tests.
+The bridge, workflow, API clients, setup/fire/status/teardown CLI, README, and demo storyboard are
+built. The current suite has 162 passing tests after the final adversarial review.
 
-Not built: creating the workflow on KeeperHub for real, proving the swap by hand, the CLI that
-wires setup together, the live end-to-end runs, and the README and video.
+The KeeperHub workflow is live. It swapped 0.002 ETH into 4.922114 USDC on Base, sent the success
+Telegram message, and produced a verified transaction receipt. A second run stopped at the wallet
+balance guard, sent the skip message, and produced no transaction.
 
-Operator actions still outstanding:
-
-- A Telegram integration named `elfa-bridge-telegram`. The only one on the account today is
-  `guardian-telegram`, and the spec bans that name from any on-camera surface.
-- The chat id for that integration.
-- A webhook key (`wfb_...`) from Settings, Developer, API keys.
-- Base ETH in `0xDfcF22C371aE8B03d61ff937acB11DC9FF007d98`, roughly $10.
-
-Confirmed live on 2026-09-10 with the org API key: wallet integration `v0dqh167ypmjqxyds6tuh`
-resolves to `0xDfcF22C371aE8B03d61ff937acB11DC9FF007d98`, matching the spec.
+The remaining gate is deployment of the current Worker. The public URL still serves an older,
+disabled build with no `/audit` route. After the operator deploys version 1.0.0, Task 11 can record
+the signed, duplicate, stale, forged, and unrouted Elfa-to-Worker paths without making another
+mainnet swap.
