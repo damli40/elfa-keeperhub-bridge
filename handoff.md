@@ -42,6 +42,7 @@ This section supersedes the historical status below.
   transaction or gas use.
 - `README.md` and `video/STORYBOARD.md` are ready. Both clearly distinguish the direct KeeperHub
   mainnet proof, genuine Elfa lifecycle delivery, and signed-harness execution proof.
+- Public repository: https://github.com/damli40/elfa-keeperhub-bridge. Default branch is `main`.
 - The KeeperHub credentials and Telegram bot token were shared in chat. They are not tracked by
   Git, but rotate them before final public launch and update Cloudflare plus the KeeperHub
   Telegram integration with the replacements.

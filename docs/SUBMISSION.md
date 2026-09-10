@@ -5,7 +5,7 @@ BUIDL and repository.
 
 ## Required links
 
-- Source code: `[ADD PUBLIC REPOSITORY URL]`
+- Source code: https://github.com/damli40/elfa-keeperhub-bridge
 - Demo video: `[ADD VIDEO URL]`
 - KeeperHub transaction proof:
   https://basescan.org/tx/0x79ab494c3f0f65c63986c1410a503e0167c94f3175492e263b81035e8eac10cd
@@ -139,7 +139,7 @@ instructions.
 - [x] README's stale-deployment statement resolved
 - [x] `docs/PROOF.md` includes the live Elfa plan ID and Worker audit event IDs
 - [ ] Video follows `video/STORYBOARD.md` and shows no secret-bearing surfaces
-- [ ] Public repository URL opens while logged out
+- [x] Public repository URL opens while logged out
 - [ ] Video URL opens while logged out
 - [ ] BaseScan transaction opens while logged out
 - [ ] Form has reachable email and X or Discord contact

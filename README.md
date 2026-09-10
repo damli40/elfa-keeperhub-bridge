@@ -168,3 +168,5 @@ transaction and sent the skip notification. The complete evidence is in
 Built for the [Elfa × KeeperHub Agent Economy Hackathon](https://dorahacks.io/hackathon/agent-economy/detail).
 The repository contains the design, workflow definitions, tests, live evidence, CLI, and demo shot
 list needed for a reproducible review.
+
+Public source: https://github.com/damli40/elfa-keeperhub-bridge
