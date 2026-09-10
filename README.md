@@ -170,3 +170,6 @@ The repository contains the design, workflow definitions, tests, live evidence, 
 list needed for a reproducible review.
 
 Public source: https://github.com/damli40/elfa-keeperhub-bridge
+
+For the shortest judge-facing explanation and recording order, use
+[`docs/JUDGE-DEMO.md`](docs/JUDGE-DEMO.md).
