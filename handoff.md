@@ -176,6 +176,64 @@ attention:
   breakage stays undiagnosable.
 - Task 5's bounded-`queryId` regression test does not discriminate; it re-proves an earlier fix.
 
+---
+
+## Where to look things up
+
+Everything below was used to build this and should be consulted before asserting anything.
+
+### In this repo
+
+| Path | What it is |
+|---|---|
+| `docs/HACKATHON-BRIEF.md` | The organisers' brief and rubric, **verbatim**, plus two Discord clarifications. Quote it, do not paraphrase. |
+| `docs/WHAT-WE-ARE-BUILDING.md` | Plain-language explanation. Start here for the pitch, the README and the finalist call. |
+| `docs/FACTS.md` | Every published number with its source and verification date. **A fact with no row here does not ship.** |
+| `docs/architecture.html` | Published diagram page. Live at https://claude.ai/code/artifact/37e7b54a-61fd-449f-9f15-04801a059344 . Republish the same file path to update; a different path creates a second artifact. |
+| `docs/superpowers/specs/2026-09-06-elfa-keeperhub-bridge-design.md` | Spec rev 2. **The binding authority.** Conflicts in the plan resolve against it. |
+| `docs/superpowers/plans/2026-09-07-elfa-keeperhub-bridge.md` | The 12 tasks. |
+| `.superpowers/sdd/2026-09-07-elfa-keeperhub-bridge/progress.md` | The ledger. Git-ignored. 18 rulings, every completed task, every deferred minor. |
+| `.env` | Git-ignored. Nine of eleven credentials populated and verified live. |
+
+### Outside this repo
+
+| Path | What it is |
+|---|---|
+| `~/Desktop/keeperhub` | **KeeperHub's own source, checked out.** The authoritative answer to any question about KeeperHub behaviour: plugin field requirements, protocol definitions, test harness shape, CI workflows. Read it rather than guessing. Also holds the bounty PR branch. |
+| `~/Desktop/keeperhub/docs/plugins/` | KeeperHub's own plugin docs, including `telegram.md` and `layerzero.md`. |
+| `~/Documents/Knowledge base/keeperhub bounty/BUIDL-BOUNTY-SUBMISSION.md` | The submitted bounty BUIDL copy. Different track, different BUIDL. |
+| `~/Documents/Knowledge base/keeperhub bounty/_buidl-fields.txt` | Character-counted form fields, all under the 960 limit. |
+| `~/Documents/Knowledge base/hackathons/SCHEDULE.md` | **Standing rule: the one hackathon schedule.** Update it at the end of every hackathon-touching session. |
+
+### Live sources, and what they answered
+
+| Source | Use it for |
+|---|---|
+| KeeperHub MCP `list_action_schemas` | Action-type names. **Needs no auth.** Output is large; it saves to a file, so grep it rather than reading it. Confirmed all six workflow action types exist. |
+| KeeperHub MCP `search_protocol_actions` | Protocol actions, which are **not** in the top-level action list. Query `ccip` returns 9, `layerzero` returns 0. A naive grep of the schema list returns 0 for both, because the namespace is `chainlink/ccip-*`. |
+| KeeperHub REST, `Authorization: Bearer $KEEPERHUB_API_KEY` | `/api/workflows` 200, `/api/integrations` 200, `/api/projects` 200. `/api/v1/workflows` and `/api/executions` are 404. Spending limits not found under four guessed paths. |
+| Elfa REST, header `x-elfa-api-key` | `GET /v2/auto/queries` 200. `POST /v2/auto/queries/validate` is free and creates nothing: use it to check a plan shape before spending credits. |
+| Telegram Bot API | `getMe` verifies a token, `getUpdates` yields the chat id, `getWebhookInfo` diagnoses why `getUpdates` is empty. `pending_update_count: 0` means the messages went to a different bot. |
+| Dune query **8659763**, execution `01M244QTJDYA14ZVE1BG08GWNK` | LayerZero all-time totals. Derived from LayerZero's own Stats query **5202883**. This Dune plan caps executions at 2 minutes and offers neither `medium` nor `large` for the LayerZero dataset, so the original times out and had to be rewritten lean. |
+| `@elfa_ai` on X | https://x.com/elfa_ai/status/2094726966264070642 . The August usage stat. **Wording is still Dami's paraphrase; confirm verbatim before publishing.** |
+
+### Skills that must be used, not optional
+
+| When | Skill |
+|---|---|
+| Any published LayerZero or Dune number | `/lz-dune-verify`. Never raw `mcp__dune__*`, never hand-rolled SQL. Cite query id and run date. |
+| Any claim about LayerZero mechanism | The `layerzero-docs` MCP is the source of truth. Query it before asserting. |
+| Any prose that ships | `/stop-slop`. No em dashes, active voice, no adverbs. |
+| Resuming the build | `superpowers:subagent-driven-development`. Sonnet implements, Opus reviews. |
+| Before a design or placement decision | Ask with concrete options rather than picking silently. |
+
+### Two things that are not written down anywhere
+
+- Whether a read-mostly PR needs a transaction link for the **bounty**. Asked in Discord, unanswered.
+- The KeeperHub spending-limits REST path. The MCP tool for it returns 401 without auth and the
+  four guessed REST paths 404. The spec's figure, `effectiveDailyCapWei = 5500000000000000`
+  (0.0055 ETH/day), came from a probe on 2026-09-07 and has not been re-verified since.
+
 ## Related work, do not confuse
 
 - `~/Desktop/keeperhub` holds the **bounty** PRs. Different repo, different BUIDL, submitted.
