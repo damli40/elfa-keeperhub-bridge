@@ -39,14 +39,19 @@ visible resolution to the problem you opened with. Problem gets ~30 seconds, pro
   as harness events. No Telegram screen; the skip is shown from the KeeperHub run trace instead.
 - Not done: no voiceover, no music, nothing uploaded. Wallet still 0.000925 ETH, so no fresh run was filmed.
 
-## Narration (added 2026-09-13)
+## Narration (revised 2026-09-13, take 2)
 
-Voice: ElevenLabs, your existing "Sentinel Narrator" voice, model eleven_multilingual_v2, stability 0.55,
-similarity 0.85, style 0, speaker boost on, speed 1.0 (settings from the ElevenLabs notebook in NotebookLM).
-One clip per scene in `video/demo/vo/s1..s9.mp3`, script in `video/demo/vo/script.json`. Scene boundaries
-were retimed to the clips: 0 / 8 / 23 / 31 / 46 / 61 / 76 / 87 / 98.5 / 103.5 s. Music:
-`assets/music-the-mountain.mp3` at -14 dB, ducked 6:1 under speech, faded out over the last 4 s.
-Mix chain: `vo/vo-mix.wav` (voice, -16 LUFS) → `vo/final-mix.wav` → muxed into `demo.mp4`.
+Take 1 (nine separate clips, spelled-out letters, "Sentinel Narrator" voice) sounded stiff. Take 2 is one
+continuous read of the whole script so the delivery flows: ElevenLabs `eleven_v3`, stock voice "Brian"
+(`Gubgw9l4dtIoQA9YZHgx`), stability 0.5, similarity 0.8, style 0, speaker boost on. Script in
+`video/demo/vo/script-v2.txt`, audio `vo/take-v3.mp3` (120 s), word alignment `vo/take-v3.align.json`.
+Scene boundaries were set from that alignment: 0 / 11.9 / 32.1 / 43.3 / 60.7 / 77.3 / 92.2 / 102.9 / 116.5 /
+121.5 s. Voice enters at 0.6 s. Music `assets/music-the-mountain.mp3` at -9 dB, ducked 6:1 under speech,
+faded out over the last 4 s. Speech -16 LUFS. Total 2:01.
+
+Numbers are said the way a person would say them: "two thousandths of an ETH", "four ninety-two in USDC",
+"a hundred and sixty-six tests". The exact figures stay on screen. Fact rows per line are unchanged from
+the table below; line 1 cites Elfa's trade-removal post for 3.83M API requests.
 
 | Scene | Spoken line (numbers spelled for the voice) | Fact row |
 | --- | --- | --- |
