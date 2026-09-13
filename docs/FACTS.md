@@ -29,8 +29,10 @@ storyboard carries a row here. A fact with no source does not ship.
 Source is the integration partner's own official account, which is the strongest kind of
 citation for this claim. Two cautions before it ships:
 
-1. **Use the exact category.** Elfa called 3.83M the month's total requests and separately reported
-   more than 1.8M developer API calls. Do not describe all 3.83M as API calls.
+1. **Use the exact category.** Elfa's trade-removal article (re-read 2026-09-13) says: "exponential growth
+   in API usage, reaching an all-time high for five consecutive months and surpassing 3.83M requests."
+   So "3.83M API requests in August" is Elfa's own framing and is safe to say. Elfa separately reported
+   more than 1.8M developer API calls; do not swap the two numbers.
 2. **Connect scale to the execution gap.** Elfa is a live product with rising developer usage. It
    retired trading to focus on intelligence for execution venues and financial agents, so its
    users need a safe way to connect triggers to an external execution layer.
